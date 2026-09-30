@@ -103,6 +103,8 @@ try:
 except NameError:
     pass
 GATE.commit_all()
+if GATE.mode == "dry_run":
+    GATE.compare_with_bq()   # solo lectura: compara lo que se publicaría vs lo vigente en BigQuery
 '''
 
 MD_NOTE = """

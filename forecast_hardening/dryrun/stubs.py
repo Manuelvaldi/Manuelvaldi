@@ -44,6 +44,11 @@ class World:
         def dates_in(pattern):
             return re.findall(pattern, s)
 
+        m_all = re.match(r"\s*SELECT \* FROM `([\w.-]+)`\s*$", s)
+        if m_all:
+            short = m_all.group(1).split(".")[-1]
+            if short in self.baseline:
+                return self.baseline[short].copy()
         if "MAX(fecha_ejecucion)" in s:
             m = self.bq_month_in_monitor if self.bq_month_in_monitor is not None else t.month
             return hit("monitor_mes", pd.DataFrame({"mes": [m]}))

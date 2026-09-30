@@ -159,3 +159,21 @@ def test_cross_check_mau_vs_subcategorias():
     assert not any(i["level"] != "INFO" for i in g.cross_checks({"forecasting_categorias": c}))
     c["mau_real_pred_m0"] = 5.0
     assert any(i["level"] == "BLOCK" for i in g.cross_checks({"forecasting_categorias": c}))
+
+
+def test_compare_with_bq_detecta_cambios_de_valor_y_de_filas(world, gate_factory):
+    make, pg = gate_factory
+    g = make("dry_run")
+    import pandas_gbq
+    base = _df(5, y="a")
+    world.baseline["entrega_tarjetas"] = base.copy()
+    world.baseline["colocacion_90"] = base.copy()
+    world.baseline["le_colocacion"] = base.copy()
+    pandas_gbq.to_gbq(base.copy(), "kpitos.entrega_tarjetas", project_id="p", if_exists="replace")      # igual
+    cambiado = base.copy(); cambiado.loc[2, "x"] += 1.0
+    pandas_gbq.to_gbq(cambiado, "kpitos.colocacion_90", project_id="p", if_exists="replace")            # valor distinto
+    pandas_gbq.to_gbq(_df(6, y="a"), "kpitos.le_colocacion", project_id="p", if_exists="replace")       # filas distintas
+    g.commit_all()
+    # el stub responde 'SELECT * FROM `tabla`' con world.baseline
+    res = g.compare_with_bq().set_index("tabla")["estado"].to_dict()
+    assert res == {"colocacion_90": "DIFIERE", "entrega_tarjetas": "IGUAL", "le_colocacion": "DIFIERE"}

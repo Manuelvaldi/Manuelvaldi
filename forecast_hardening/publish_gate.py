@@ -115,6 +115,7 @@ class PublishGate:
         self.results: list[dict] = []      # resultado por grupo (se llena en commit)
         self._orig = {}
         self._baseline_cache: dict = {}
+        self.staged: dict = {}             # tabla corta -> (nombre completo, DataFrame) de lo último comprometido
         self.issues_live: list[dict] = []
 
     # ------------------------------------------------------------------ enganche
@@ -403,6 +404,9 @@ class PublishGate:
             ops_eff = [o for i, o in enumerate(ops) if not (o["mode"] == "replace" and o["kind"] != "dml" and last[o["short"]] != i)]
             frames = {}
             for o in ops_eff:
+                if o["kind"] != "dml" and o["mode"] == "replace":
+                    self.staged[o["short"]] = (o["table"], o["df"])
+            for o in ops_eff:
                 if o["kind"] != "dml":
                     for it in self.check_table(o):
                         res["issues"].append(dict(it, table=o["short"]))
@@ -436,6 +440,67 @@ class PublishGate:
         if held and raise_on_hold:
             raise PublishError(f"Grupos retenidos (se conserva la versión anterior): {held}. Ver reporte arriba.")
         return self.results
+
+    def compare_with_bq(self, tol: float = 1e-6, skip=("captaciones_monitoreo_le", "pipeline_audit")):
+        """Compara lo que ESTA corrida publicaría contra lo que hoy hay en BigQuery (p. ej. lo publicado por la V11
+        el mismo día). Es la prueba de 'sin afectar la salida' con datos reales. Solo lectura."""
+        import pandas_gbq
+        rows = []
+        for short, (fq, new) in sorted(self.staged.items()):
+            if short in skip:
+                continue
+            try:
+                old = pandas_gbq.read_gbq(f"SELECT * FROM `{fq}`", project_id=fq.split(".")[0], credentials=self.creds())
+            except Exception as e:
+                rows.append(dict(tabla=short, estado="SIN_TABLA_VIGENTE", detalle=f"{type(e).__name__}"))
+                continue
+            rows.append(self._cmp_frames(short, old, new, tol))
+        res = pd.DataFrame(rows)
+        self.log("\n" + "=" * 100 + "\n COMPARACIÓN vs BIGQUERY VIGENTE (¿la salida cambia?)\n" + "=" * 100)
+        for r in rows:
+            self.log(f"[{r['estado']:<12}] {r['tabla']:<40} {r.get('detalle', '')}")
+        self.compare_result = res
+        return res
+
+    @staticmethod
+    def _cmp_frames(short, old, new, tol):
+        def norm(d):
+            d = d.copy()
+            for c in d.columns:
+                if pd.api.types.is_datetime64_any_dtype(d[c]):
+                    d[c] = d[c].dt.strftime("%Y-%m-%d")
+            key = [c for c in ["fecha"] + _KEY_HELPERS if c in d.columns]
+            if "fecha" in key:
+                f = pd.to_datetime(d["fecha"], errors="coerce", dayfirst=True)
+                d["_k"] = f.dt.strftime("%Y-%m-%d").fillna(d["fecha"].astype(str))
+                key = ["_k"] + [c for c in key if c != "fecha"]
+                d = d.sort_values(key, kind="stable")
+            return d.reset_index(drop=True)
+        try:
+            a, b = norm(old), norm(new)
+            det = []
+            ca, cb = set(a.columns) - {"_k"}, set(b.columns) - {"_k"}
+            if ca - cb:
+                det.append(f"solo en BQ: {sorted(ca - cb)[:4]}")
+            if cb - ca:
+                det.append(f"columnas nuevas: {sorted(cb - ca)[:4]}")
+            if len(a) != len(b):
+                return dict(tabla=short, estado="DIFIERE", detalle=f"filas BQ={len(a)} nueva={len(b)}; " + "; ".join(det))
+            bad = []
+            for c in sorted(ca & cb):
+                x, y = a[c], b[c]
+                try:
+                    xn, yn = pd.to_numeric(x, errors="raise").astype(float), pd.to_numeric(y, errors="raise").astype(float)
+                    m = ~((xn.isna() & yn.isna()) | np.isclose(xn, yn, rtol=tol, atol=tol, equal_nan=True))
+                except Exception:
+                    m = x.astype(str).values != y.astype(str).values
+                if m.any():
+                    bad.append(f"{c}({int(m.sum())})")
+            if bad:
+                det.append(f"{len(bad)} columnas con valores distintos: {bad[:6]}")
+            return dict(tabla=short, estado="DIFIERE" if bad or (ca - cb) else "IGUAL", detalle="; ".join(det))
+        except Exception as e:
+            return dict(tabla=short, estado="ERROR", detalle=f"{type(e).__name__}: {str(e)[:80]}")
 
     def report(self, t0=None):
         self.log("\n" + "=" * 100 + f"\n REPORTE DE PUBLICACIÓN | modo={self.mode} | hoy={self.today}\n" + "=" * 100)

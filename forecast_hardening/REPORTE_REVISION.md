@@ -48,6 +48,10 @@ Por tabla: no vacía, sin infinitos, sin duplicados por clave, columnas y tipos 
 
 **Importante:** el default `stage` cambia *cuándo* se escribe (al final, celda nueva). Si corres celdas sueltas, usa `PIPELINE_MODE=live`. Los umbrales de los chequeos entre tablas están calibrados con datos sintéticos: parte en `dry_run` una semana y ajusta.
 
+## Corrida real de la V12 en `dry_run` (Colab, 30-sep-2026)
+
+Los 10 grupos quedaron `OK(dry_run)`, **0 BLOCK**. Contra las tablas vigentes en BigQuery no hubo columnas perdidas ni tipos incompatibles (solo `pipeline_audit` sin línea base: aún no existe). Los chequeos entre tablas de `kpi_core` (mismo mes, suma de productos = GPV App en días futuros, MAU App = subcategorías, desglose reactive) pasaron con datos reales. Avisos (WARN): (a) `forecasting_gpv_productos` trae 4 columnas nuevas `rev_ci/co_*_real_pred`, las agregadas en V11, que la tabla vigente aún no tenía; (b) `forecast_le_insurance` tiene valores negativos en `gpv` (probables devoluciones netas en `economics`; por verificar). La celda final ahora también compara, en `dry_run`, lo que se publicaría contra lo vigente en BigQuery (`GATE.compare_with_bq()`).
+
 ## Sobre TimesFM (medido en Colab con datos reales)
 
 * Usa **TimesFM 2.5** (Apache-2.0). Los pesos de 3.0 son no comerciales/no producción según el README del paquete.
