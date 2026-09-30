@@ -11,9 +11,9 @@ entrega de tarjetas, KPIs core (MAU/GPV/OB/RGU/CI-CO/ATM), revenue financiero, T
 | Ejecutar el notebook **completo** de punta a punta (stubs de BigQuery/Drive/Colab + datos sintéticos), en 7 escenarios de fecha | Hecho (`dryrun/`) |
 | Demostrar que V12 no cambia la salida en días normales | Hecho, **sobre datos sintéticos** (ver abajo) |
 | Conectarme a tus BigQuery/Drive, validar contra tablas reales, medir precisión real | **No** (no hay credenciales en este entorno) |
-| Correr TimesFM con pesos reales | **No** (HuggingFace bloqueado por la red del entorno). Adaptador probado solo con un stub |
+| Correr TimesFM con pesos reales | **No desde este entorno** (HuggingFace bloqueado); **sí lo corriste tú en Colab** (resultados abajo) |
 
-Por eso los números de "antes/después" de abajo son **de comportamiento del código**, no de precisión sobre tus datos.
+Por eso los números de "antes/después" de los hallazgos #1–#12 son **de comportamiento del código** (datos sintéticos). Las secciones de TimesFM y V1 vs V5 son **mediciones en Colab con tus datos reales**.
 
 ## Hallazgos confirmados con el dry-run (reproducibles)
 
@@ -48,25 +48,41 @@ Por tabla: no vacía, sin infinitos, sin duplicados por clave, columnas y tipos 
 
 **Importante:** el default `stage` cambia *cuándo* se escribe (al final, celda nueva). Si corres celdas sueltas, usa `PIPELINE_MODE=live`. Los umbrales de los chequeos entre tablas están calibrados con datos sintéticos: parte en `dry_run` una semana y ajusta.
 
-## Sobre TimesFM
+## Sobre TimesFM (medido en Colab con datos reales)
 
 * Usa **TimesFM 2.5** (Apache-2.0). Los pesos de 3.0 son no comerciales/no producción según el README del paquete.
-* Tus propios backtests (celdas 76–83) muestran que el **cierre mensual ya es bueno** (APE 0,0–3,6% con el pace) y lo ruidoso es el **perfil diario** (MAPE ~15% en mau_app, peor los días 22–26). TimesFM puede mejorar la forma diaria y los cortes tempranos (d2/d7); no el cierre tardío, que lo manda el pace. No es plug-and-play: los picos por día del mes (1, 5, 20, fin de mes) y feriados son calendario, no periodicidad fija → conviene usar covariables (XReg) y/o un blend con el modelo actual.
-* `timesfm_shadow.py` (un archivo, para Drive) mide en sombra, con la misma información al corte, contra `SeasonalNaive`, `DomProfile` (equivalente al pace), `XGBCalendar`, blends y TimesFM (con/sin covariables). `compare()` solo declara candidato si gana en ≥65% de los (mes, corte), con ≥10% de mejora relativa y ≥12 observaciones. **Nada de esto cambia producción.**
-* Alternativa: BigQuery ML trae TimesFM integrado; no verifiqué la sintaxis (no tengo acceso a tu proyecto).
+* Backtest en sombra (`timesfm_shadow.py`), 8 meses cerrados, cortes día 2/7/14/21, misma información al corte. Ojo: "actual" = `DomProfile` (mi baseline tipo pace), **no** el pipeline real; `xgb` = `XGBCalendar` (aprox. del modelo actual).
 
-Colab:
-```python
-!pip install -q "timesfm[torch]"            # covariables: "timesfm[xreg]"
-import sys; sys.path.append(directorio_salida)   # carpeta con timesfm_shadow.py
-import timesfm_shadow as tsh
-s = mau_app.groupby('fecha')['mau'].sum()
-fc = {"actual": tsh.DomProfile(), "xgb": tsh.XGBCalendar(), "timesfm": tsh.TimesFMForecaster(),
-      "timesfm_xreg": tsh.TimesFMForecaster(use_xreg=True)}
-bt = tsh.run_backtest(s, fc, tsh.last_closed_months(s, 8), cutoffs=(2, 7, 14, 21))
-print(tsh.summarize(bt)); print(tsh.compare(bt, "xgb", "timesfm_xreg"))
-```
-(Para comparar contra el método *real* del pipeline, envuelve `_refit_y_predecir` de la celda de backtest como un `Forecaster`.)
+**MAU App** (serie que se reinicia cada mes, pico el día 1): TimesFM **no sirve**. Error de cierre (mediana) 8,7–11,6% zero-shot y 3,1–6,0% con covariables (XReg), contra 1,1–2,2% (actual) y 0,7–2,4% (xgb); MAPE diario 70–157% vs 12–28%. Sobreestima +5% a +14%. Decisión `MANTENER_ACTUAL` (ganó 1 de 32).
+
+**GPV App** (serie continua): el primer `compare` (vs `xgb`) dio `CANDIDATO_A_REEMPLAZAR` (gana 72%, −13% de error), pero `xgb` es el baseline más débil en cierre; contra `actual` TimesFM no gana en cierre (p. ej. corte 14: 0,9% actual vs 1,3% timesfm_xreg). Donde sí gana es en forma diaria (MAPE 5,6–6,6% vs 11–16% de `actual`). Con la métrica de **forma pura** (`mape_forma`, pronóstico reescalado al total real del resto del mes) y contra `xgb`:
+
+| Desafiante | Gana en | Mejora de forma | Decisión |
+|---|---|---|---|
+| timesfm | 53% | 6% | MANTENER_ACTUAL |
+| timesfm_xreg | 59% | 1% | MANTENER_ACTUAL |
+| blend 70% xgb + 30% timesfm_xreg | 75% | 3,9% | MANTENER_ACTUAL |
+
+**Conclusión: no integrar TimesFM al pipeline.** La mejora de forma frente a `xgb` (1–6%) queda bajo el umbral (≥65% de casos y ≥10% de mejora) y no compensa un modelo de 925 MB, la dependencia de HuggingFace y más puntos de falla. Queda como herramienta de medición; repetir el backtest si cambian los datos.
+
+## Backtest V1 vs V5 con las clases reales del pipeline (Colab, datos reales)
+
+`snippets/backtest_v5_vs_v1.py`: por mes cerrado y corte (0, 2, 7, 14, 21; 0 = corrida del día 1) entrena solo con datos hasta el corte y predice el resto del mes. V1 = clase base (todas las filas, target crudo, sin lags); V5 = producción (solo días reales, `log1p`, lags mensuales). 6 meses, 30 casos por KPI. Sin ancla de pace (mide el modelo crudo). V5 "prod" usa los hiperparámetros de los `.pkl` de producción (`best_estimator_`); las variantes anteriores usaron parámetros fijos.
+
+| KPI | Error de cierre V1 → V5 | Forma diaria | Veredicto |
+|---|---|---|---|
+| **MAU App** | 4,2% → **1,2%** (V5 gana 80%) | V5 mejor (10–12% vs 16–66%) | **V5 claramente mejor** |
+| GPV App | 0,88% → 1,62% (V5 gana 30%) | empate (~6%) | empate; manda el pace |
+| gpv_tc_fis | mixto: V5 gana cortes 0 y 2, V1 los tardíos | empate | sin ganador |
+| gpv_tc_vir | **2,0%** → 4,8% (V5 gana 43%) | V5 algo mejor en cortes 2 y 7 | V1 mejor en cierre |
+| gpv_prp_vir | 2,0% → 1,9% (V1 mejor tarde: 0,7% vs 1,0%) | **V5 mejor** (5,5–6,7% vs 6,4–7,0%) | empate en cierre, V5 en forma |
+| gpv_p2p | 2,1% → 2,3% (V5 mejor tarde) | **V5 mejor** (6,2–7,1% vs 7,6–8,3%) | V5 en forma |
+
+Experimentos de aislamiento (parámetros fijos): quitar `log1p` **empeora** casi todo (p. ej. tc_fis corte 2: 7,8% vs 4,1%; p2p corte 2: 6,7% vs 4,7%) → el `log1p` no es el problema. Los hiperparámetros sí pesan según el KPI (V5 con parámetros de V1 iguala a V1 en cierre tardío en prp_vir y p2p). En p2p el resultado con parámetros de producción salió idéntico al de los parámetros fijos de `mau_app`: probablemente la grilla eligió los mismos valores (no verificado).
+
+Hallazgo puntual: en las primeras jornadas del mes V5 subestima en `tc_vir` (−7% el día 1, −4% el día 2, vs −2% y −0,6% de V1); a fin de mes desaparece. Impacto acotado: los productos se prorratean al total de GPV App, así que solo afecta la mezcla.
+
+**Conclusión: no cambiar ningún modelo.** V5 es el correcto para MAU; en los flujos de GPV no hay ganador consistente (diferencias de décimas a 2–3 puntos con 6 meses). Limitaciones: 6 meses, hiperparámetros de producción con leve ventaja (los `.pkl` se entrenaron con todos los datos), sin pace.
 
 ## Otros riesgos que NO toqué (cambiarían la salida; decide tú)
 
@@ -83,12 +99,13 @@ print(tsh.summarize(bt)); print(tsh.compare(bt, "xgb", "timesfm_xreg"))
 
 1. **Rotar la API key de la CMF** y cargarla como secreto `CMF_API_KEY`.
 2. Correr V12 en Colab con `PIPELINE_MODE=dry_run` (reporte en `.../modelos/reportes_publicacion/`) y pasarme el reporte, o darme acceso de solo lectura / exports de `modelos_forecasting_*` y `INFORMATION_SCHEMA.COLUMNS` de `kpitos` para validar contra datos reales.
-3. Habilitar `huggingface.co` en el entorno (o correr el shadow en Colab) para medir TimesFM de verdad.
-4. Decidir el modo por defecto (`stage` vs `live`).
+3. Decidir el modo por defecto (`stage` vs `live`) una vez vistas las corridas en `dry_run`.
+
+(TimesFM y V1 vs V5 ya se midieron en Colab; ver secciones arriba.)
 
 ## Archivos
 
 * `Script_Diario_V12_blindado.ipynb` — notebook (sin salidas; primera celda = helper V12, última = publicación). Se regenera con `build_v12.py` (reemplazos con conteo exacto; falla si el fuente cambia).
-* `publish_gate.py`, `timesfm_shadow.py` — módulos.
+* `publish_gate.py`, `timesfm_shadow.py` — módulos. `snippets/backtest_v5_vs_v1.py` — backtest V1 vs V5 (se ejecuta dentro de Colab).
 * `dryrun/` — stubs, datos sintéticos, runner, `compare_runs.py`, `landing_summary.py`. Uso: `python -m forecast_hardening.dryrun.run_dryrun NOTEBOOK --now "2026-09-15 10:00" --out DIR`.
 * `tests/` — 24 pruebas (compuerta con inyección de fallas, parches, shadow).
