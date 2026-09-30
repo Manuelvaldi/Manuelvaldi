@@ -86,3 +86,11 @@ def test_un_forecaster_que_falla_no_tumba_el_backtest(serie):
     bt = tsh.run_backtest(serie, {"malo": malo, "ok": tsh.SeasonalNaive()}, [pd.Period("2026-09")], cutoffs=(7,))
     assert "ValueError" in bt[bt.model == "malo"]["error"].iloc[0]
     assert bt[bt.model == "ok"]["ape_cierre"].notna().all()
+
+
+def test_mape_forma_ignora_el_nivel_y_mide_el_reparto():
+    assert tsh._mape_forma(np.array([1., 2., 3.]), np.array([10., 20., 30.])) == pytest.approx(0.0)   # mismo reparto, otro nivel
+    assert tsh._mape_forma(np.array([3., 2., 1.]), np.array([10., 20., 30.])) > 0.3
+    rows = [dict(month=f"m{m}", cutoff=c, model=n, ape_cierre=0.03, sesgo_cierre=0., mape_diario=0.1, mape_forma=f)
+            for m in range(12) for c in (2, 7) for n, f in (("a", 0.10), ("b", 0.06))]
+    assert tsh.compare(pd.DataFrame(rows), "a", "b", metric="mape_forma")["decision"] == "CANDIDATO_A_REEMPLAZAR"

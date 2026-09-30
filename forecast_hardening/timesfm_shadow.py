@@ -183,6 +183,16 @@ def last_closed_months(series: pd.Series, n: int = 6) -> list[pd.Period]:
     return list(months)
 
 
+def _mape_forma(pred: np.ndarray, actual: np.ndarray) -> float:
+    """MAPE diario tras reescalar el pronóstico al total REAL del resto del mes: mide solo el reparto
+    diario (lo que importa cuando el total del mes ya viene anclado por el pace)."""
+    nz = actual > 0
+    if not nz.any() or pred.sum() <= 0:
+        return np.nan
+    p = pred * (actual.sum() / pred.sum())
+    return float(np.mean(np.abs(p[nz] - actual[nz]) / actual[nz]))
+
+
 def run_backtest(series: pd.Series, forecasters: Dict[str, Forecaster], months: Sequence[pd.Period],
                  cutoffs: Sequence[int] = (2, 7, 14, 21), min_history_days: int = 120,
                  scale: float = 1.0) -> pd.DataFrame:
@@ -224,7 +234,8 @@ def run_backtest(series: pd.Series, forecasters: Dict[str, Forecaster], months: 
                 rows.append(dict(month=str(p), cutoff=c, model=name, real_total=real_total / scale,
                                  landing=landing / scale, ape_cierre=abs(landing - real_total) / real_total,
                                  sesgo_cierre=(landing - real_total) / real_total,
-                                 mape_diario=float(np.mean(np.abs(pred[nz] - actual_rest[nz]) / actual_rest[nz])) if nz.any() else np.nan))
+                                 mape_diario=float(np.mean(np.abs(pred[nz] - actual_rest[nz]) / actual_rest[nz])) if nz.any() else np.nan,
+                                 mape_forma=_mape_forma(pred, actual_rest)))
     return pd.DataFrame(rows)
 
 
@@ -232,15 +243,16 @@ def summarize(bt: pd.DataFrame) -> pd.DataFrame:
     ok = bt.dropna(subset=["ape_cierre"]) if "ape_cierre" in bt else bt
     g = ok.groupby(["model", "cutoff"]).agg(ape_cierre_mediana=("ape_cierre", "median"), ape_cierre_media=("ape_cierre", "mean"),
                                             sesgo_medio=("sesgo_cierre", "mean"), mape_diario_mediana=("mape_diario", "median"),
+                                            mape_forma_mediana=("mape_forma", "median"),
                                             n=("ape_cierre", "size"))
     return g.round(4)
 
 
-def compare(bt: pd.DataFrame, current: str, challenger: str) -> dict:
+def compare(bt: pd.DataFrame, current: str, challenger: str, metric: str = "ape_cierre") -> dict:
     """Decisión por evidencia: el desafiante solo 'gana' si supera al actual con margen y de forma consistente."""
-    ok = bt.dropna(subset=["ape_cierre"])
-    a = ok[ok.model == current].set_index(["month", "cutoff"])["ape_cierre"]
-    b = ok[ok.model == challenger].set_index(["month", "cutoff"])["ape_cierre"]
+    ok = bt.dropna(subset=[metric])
+    a = ok[ok.model == current].set_index(["month", "cutoff"])[metric]
+    b = ok[ok.model == challenger].set_index(["month", "cutoff"])[metric]
     j = pd.concat([a, b], axis=1, keys=["cur", "cha"]).dropna()
     if j.empty:
         return dict(n=0, decision="SIN_DATOS")
@@ -250,5 +262,5 @@ def compare(bt: pd.DataFrame, current: str, challenger: str) -> dict:
     mape_b = ok[ok.model == challenger]["mape_diario"].median()
     decision = "CANDIDATO_A_REEMPLAZAR" if (len(j) >= 12 and win >= 0.65 and rel >= 0.10) else (
         "NO_CONCLUYENTE" if len(j) < 12 else "MANTENER_ACTUAL")
-    return dict(n=int(len(j)), win_rate=round(win, 3), mejora_rel_mediana_ape=round(rel, 3),
+    return dict(metric=metric, n=int(len(j)), win_rate=round(win, 3), mejora_rel_mediana_ape=round(rel, 3),
                 mape_diario_actual=round(float(mape_a), 4), mape_diario_desafiante=round(float(mape_b), 4), decision=decision)
