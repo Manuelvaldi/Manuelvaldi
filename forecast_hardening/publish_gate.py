@@ -10,12 +10,13 @@ Se inserta UNA vez al inicio del notebook (la celda V12 incluye este archivo tal
 
 por lo tanto el código de negocio del notebook NO cambia. Modos (env PIPELINE_MODE):
 
-    stage   (default)  acumula todo en memoria; al final `GATE.commit_all()` valida por tabla y
+    stage              acumula todo en memoria; al final `GATE.commit_all()` valida por tabla y
                        entre tablas y publica SOLO los grupos sanos, en el mismo orden original.
                        Un grupo con problemas se retiene completo: se conserva la versión anterior
                        (consistente) de todas sus tablas en vez de publicar una mezcla.
     live               escribe inmediatamente como hoy, pero con validación por tabla.
-    dry_run            como stage pero no escribe nada en BigQuery; deja el reporte.
+    dry_run (default)  como stage pero no escribe nada en BigQuery; deja el reporte. Para escribir hay que pedir
+                       explicitamente PIPELINE_MODE=stage o live.
 
 La salida (nombres de columnas y tipos) se alinea con la tabla vigente en BigQuery cuando existe,
 de modo que un float "casualmente entero" no cambie una columna de FLOAT a INTEGER de un día a otro.
@@ -118,6 +119,7 @@ class PublishGate:
         self.ops: list[dict] = []          # todas las operaciones, en orden
         self.results: list[dict] = []      # resultado por grupo (se llena en commit)
         self._orig = {}
+        self._passthrough = False          # True mientras se EJECUTA una operación: las llamadas internas no se re-encolan
         self._baseline_cache: dict = {}
         self.staged: dict = {}             # tabla corta -> (nombre completo, DataFrame) de lo último comprometido
         self.issues_live: list[dict] = []
@@ -141,10 +143,12 @@ class PublishGate:
             gate = self
 
             def _load(client, dataframe, destination, *a, **k):
+                if gate._passthrough:
+                    return gate._orig["load"](client, dataframe, destination, *a, **k)
                 return gate._capture_load(client, dataframe, destination, a, k)
 
             def _query(client, sql, *a, **k):
-                if isinstance(sql, str) and _DML.match(sql):
+                if not gate._passthrough and isinstance(sql, str) and _DML.match(sql):
                     return gate._capture_dml(client, sql, a, k)
                 return gate._orig["query"](client, sql, *a, **k)
 
@@ -153,6 +157,8 @@ class PublishGate:
         except Exception as e:  # pragma: no cover
             self.log(f"[GATE] !! no se pudo enganchar bigquery.Client: {e}")
         self.log(f"[GATE] instalada | modo={self.mode} | grupos={list(GROUPS)}")
+        if self.mode != "dry_run":
+            self.log(f"[GATE] !!!! MODO '{self.mode}': ESTA CORRIDA ESCRIBE EN BIGQUERY (para solo validar: PIPELINE_MODE=dry_run) !!!!")
         return self
 
     def uninstall(self):
@@ -382,6 +388,15 @@ class PublishGate:
 
     # ------------------------------------------------------------------ ejecución
     def _execute(self, op):
+        """Ejecuta de verdad. pandas_gbq.to_gbq hace internamente delete+create+client.load_table_from_dataframe:
+        con _passthrough esas llamadas internas llegan a BigQuery en vez de volver a la cola."""
+        self._passthrough = True
+        try:
+            return self._execute_inner(op)
+        finally:
+            self._passthrough = False
+
+    def _execute_inner(self, op):
         if op["kind"] == "to_gbq":
             return self._orig["to_gbq"](op["df"], op["dest"], *op["args"], **op["kwargs"])
         if op["kind"] == "load":
@@ -527,5 +542,6 @@ class PublishGate:
 
 
 def get_pipeline_mode() -> str:
-    m = os.environ.get("PIPELINE_MODE", "stage").strip().lower()
-    return m if m in ("stage", "live", "dry_run") else "stage"
+    # SEGURO POR DEFECTO: sin PIPELINE_MODE explicito NO se escribe nada en BigQuery.
+    m = os.environ.get("PIPELINE_MODE", "dry_run").strip().lower()
+    return m if m in ("stage", "live", "dry_run") else "dry_run"

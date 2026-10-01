@@ -43,14 +43,18 @@ Por eso los números de "antes/después" de los hallazgos #1–#12 son **de comp
 
 ## Compuerta de publicación (`publish_gate.py`, dentro de la 1ª celda del notebook)
 
-Modos (`PIPELINE_MODE`): **stage** (default: acumula y publica al final, por grupos, solo si valida) · **live** (como V11, con validación por tabla) · **dry_run** (valida y no escribe).
+Modos (`PIPELINE_MODE`): **dry_run** (DEFAULT: valida y no escribe nada) · **stage** (acumula y publica al final, por grupos, solo si valida) · **live** (como V11, con validación por tabla). Para escribir hay que pedirlo explícitamente.
 Por tabla: no vacía, sin infinitos, sin duplicados por clave, columnas y tipos compatibles con la tabla vigente, sin colapso de filas. Entre tablas (`kpi_core`): mismo mes, suma de productos = GPV App en días futuros, MAU App = subcategorías, desglose reactive cuadra. Grupos: captación, principales, tesorería, seguros, tarjetas, kpi_core, revenue financiero, referencias, colocaciones, auditoría. Un grupo retenido no bloquea a los demás; al final se levanta `PublishError` para que el job figure como fallido.
 
-**Importante:** el default `stage` cambia *cuándo* se escribe (al final, celda nueva). Si corres celdas sueltas, usa `PIPELINE_MODE=live`. Los umbrales de los chequeos entre tablas están calibrados con datos sintéticos: parte en `dry_run` una semana y ajusta.
+**Importante:** `stage` cambia *cuándo* se escribe (al final, celda nueva). Si corres celdas sueltas, usa `PIPELINE_MODE=live`. Los umbrales de los chequeos entre tablas están calibrados con datos sintéticos: parte en `dry_run` una semana y ajusta.
 
 ## Corrida real de la V12 en `dry_run` (Colab, 30-sep-2026)
 
 Los 10 grupos quedaron `OK(dry_run)`, **0 BLOCK**. Contra las tablas vigentes en BigQuery no hubo columnas perdidas ni tipos incompatibles (solo `pipeline_audit` sin línea base: aún no existe). Los chequeos entre tablas de `kpi_core` (mismo mes, suma de productos = GPV App en días futuros, MAU App = subcategorías, desglose reactive) pasaron con datos reales. Avisos (WARN): (a) `forecasting_gpv_productos` trae 4 columnas nuevas `rev_ci/co_*_real_pred`, las agregadas en V11, que la tabla vigente aún no tenía; (b) `forecast_le_insurance` tiene valores negativos en `gpv` (probables devoluciones netas en `economics`; por verificar). La celda final ahora también compara, en `dry_run`, lo que se publicaría contra lo vigente en BigQuery (`GATE.compare_with_bq()`).
+
+## Incidente: bug de la compuerta en modo `stage` (1-oct-2026) — CORREGIDO
+
+La primera corrida en `stage` con el `pandas_gbq` real dejó **vacías** las tablas publicadas vía `to_gbq`: al comprometer, `pandas_gbq.to_gbq(if_exists='replace')` hace internamente *delete + create + `client.load_table_from_dataframe`*, y esa carga interna volvía a caer en la cola de la compuerta (que la tragaba), así que las tablas quedaban recreadas sin filas. Mis pruebas con stubs no lo detectaron porque el stub no llama a la carga interna. Corrección: durante la ejecución las llamadas internas pasan directo a BigQuery (`_passthrough`) + prueba de regresión que imita el `to_gbq` real. Además el modo por defecto ahora es `dry_run`: sin `PIPELINE_MODE` explícito no se escribe nada. Recuperación: volver a publicar corriendo la versión corregida en `stage`/`live`.
 
 ## Corrida real en día 1 (1-oct-2026) y su comparación
 

@@ -27,8 +27,8 @@ HELPER = r'''# =================================================================
 #   20-21h y medianoche): tablas con meses mezclados. PIPELINE_NOW="YYYY-MM-DD HH:MM" fuerza la
 #   fecha (reprocesos/pruebas).
 # * GATE: intercepta pandas_gbq.to_gbq / bigquery load / DELETE del monitoreo. Modo (env
-#   PIPELINE_MODE): stage (default: publica todo junto al final, por grupos, si valida) |
-#   live (como V11, con validación por tabla) | dry_run (valida, no escribe).
+#   PIPELINE_MODE): dry_run (DEFAULT: valida y NO escribe nada) | stage (publica todo al final,
+#   por grupos, si valida) | live (como V11, con validación por tabla). Escribir exige pedirlo.
 # * V12_FIXES: cada corrección de lógica se puede apagar con PIPELINE_V12_OFF=nombre1,nombre2.
 # ==============================================================================
 import os, pickle, tempfile

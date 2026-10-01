@@ -212,3 +212,39 @@ def test_allow_partial_publica_lo_que_existe(world, gate_factory, monkeypatch):
     pandas_gbq.to_gbq(_df(3), "kpitos.tmc", project_id="p", if_exists="replace")            # falta one_page
     g.commit_all()
     assert [w["table"] for w in world.writes] == ["kpitos.tmc"]
+
+
+def test_commit_no_debe_interceptarse_a_si_mismo_con_el_to_gbq_real(world, gate_factory):
+    """El pandas_gbq REAL hace internamente delete+create y luego client.load_table_from_dataframe. Al comprometer,
+    esa carga interna NO puede volver a caer en la cola de la compuerta (dejaría la tabla vacía)."""
+    import pandas_gbq
+    from google.cloud import bigquery
+    real_calls = {"created_empty": [], "loaded": []}
+
+    def to_gbq_realista(df, destination_table=None, project_id=None, if_exists="fail", *a, **k):
+        real_calls["created_empty"].append(destination_table)                     # delete + create (replace)
+        bigquery.Client().load_table_from_dataframe(df, destination_table).result()   # carga interna
+
+    pandas_gbq.to_gbq = to_gbq_realista                                            # antes de instalar la compuerta
+    orig_load = bigquery.Client.load_table_from_dataframe
+    def load_registra(self, df, dest, *a, **k):
+        real_calls["loaded"].append(str(dest)); return orig_load(self, df, dest, *a, **k)
+    bigquery.Client.load_table_from_dataframe = load_registra
+    make, pg = gate_factory
+    g = make("stage")
+    pandas_gbq.to_gbq(_df(), "kpitos.entrega_tarjetas", project_id="p", if_exists="replace")
+    assert real_calls["created_empty"] == []                                       # nada se ejecuta antes del commit
+    g.commit_all()
+    assert real_calls["created_empty"] == ["kpitos.entrega_tarjetas"]
+    assert real_calls["loaded"] == ["kpitos.entrega_tarjetas"], "la carga interna debe llegar a BigQuery, no a la cola de la compuerta"
+    assert g.ops == []
+
+
+def test_sin_variable_el_modo_por_defecto_no_escribe(monkeypatch):
+    import forecast_hardening.publish_gate as pg
+    monkeypatch.delenv("PIPELINE_MODE", raising=False)
+    assert pg.get_pipeline_mode() == "dry_run"
+    monkeypatch.setenv("PIPELINE_MODE", "valor_raro")
+    assert pg.get_pipeline_mode() == "dry_run"
+    monkeypatch.setenv("PIPELINE_MODE", "stage")
+    assert pg.get_pipeline_mode() == "stage"
