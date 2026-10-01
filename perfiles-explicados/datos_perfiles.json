@@ -1,0 +1,20 @@
+{
+  "_ayuda": {
+    "clientes_tenpo": "Número de clientes Tenpo que caen en el perfil. Se convierte a % del total (la columna suma 100%). Alternativa: poner pct_clientes_tenpo directo (0-100).",
+    "colocaciones": "Colocaciones del perfil (MM CLP). Define el ANCHO de cada grupo en el gráfico SAM.",
+    "ifn": "Ingreso financiero neto del perfil (MM CLP). Barra 1.",
+    "isn": "Ingreso por servicio neto del perfil (MM CLP). Barra 2.",
+    "costo_riesgo": "Costo de riesgo del perfil (MM CLP). Barra 3, se dibuja hacia abajo (se acepta positivo o negativo).",
+    "competidores": "% de las colocaciones del perfil que tienen los bancos competidores (0-100). Se muestran sobre cada grupo; se pueden agregar o quitar bancos (mismas claves en los 7 perfiles).",
+    "alto_de_barras": "Alto = monto / colocaciones del perfil. Como el ancho es proporcional a las colocaciones, el área de cada barra equivale a su monto en $."
+  },
+  "perfiles": {
+    "P1": {"clientes_tenpo": null, "colocaciones": null, "ifn": null, "isn": null, "costo_riesgo": null, "competidores": {"BF": null, "BS": null}},
+    "P2": {"clientes_tenpo": null, "colocaciones": null, "ifn": null, "isn": null, "costo_riesgo": null, "competidores": {"BF": null, "BS": null}},
+    "P3": {"clientes_tenpo": null, "colocaciones": null, "ifn": null, "isn": null, "costo_riesgo": null, "competidores": {"BF": null, "BS": null}},
+    "P4": {"clientes_tenpo": null, "colocaciones": null, "ifn": null, "isn": null, "costo_riesgo": null, "competidores": {"BF": null, "BS": null}},
+    "P5": {"clientes_tenpo": null, "colocaciones": null, "ifn": null, "isn": null, "costo_riesgo": null, "competidores": {"BF": null, "BS": null}},
+    "P6": {"clientes_tenpo": null, "colocaciones": null, "ifn": null, "isn": null, "costo_riesgo": null, "competidores": {"BF": null, "BS": null}},
+    "P7": {"clientes_tenpo": null, "colocaciones": null, "ifn": null, "isn": null, "costo_riesgo": null, "competidores": {"BF": null, "BS": null}}
+  }
+}
