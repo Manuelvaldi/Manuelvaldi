@@ -92,6 +92,39 @@ GATE = PublishGate(mode=get_pipeline_mode(), today=hoy_chile().date(),
 print(f"[V12] hoy_chile={hoy_chile().date()} | modo={GATE.mode} | fixes_off={sorted(_OFF) or '-'}")
 '''
 
+CONFIG_CELL = r'''# ==============================================================================
+# V12 — CONFIGURACIÓN DE EJECUCIÓN  (EDITA SOLO ESTA CELDA y luego Runtime > Run all)
+# ==============================================================================
+import os
+
+MODO = "dry_run"
+#   "dry_run" = valida y compara contra BigQuery, NO escribe nada            <- seguro (recomendado para probar)
+#   "stage"   = publica en BigQuery al final, por grupos, solo si valida      <- producción
+#   "live"    = escribe tabla por tabla como la V11 (para correr celdas sueltas)
+
+PERMITIR_GRUPOS_PARCIALES = ""
+#   Grupos donde, si falta una tabla, se publica igual lo que exista. Ej: "referencias". Vacío = todo-o-nada.
+
+# --------------------------------------------------------------------------------------------------
+os.environ["PIPELINE_MODE"] = os.environ.get("PIPELINE_MODE_FORCE", MODO)
+os.environ["PIPELINE_ALLOW_PARTIAL"] = PERMITIR_GRUPOS_PARCIALES
+
+try:                                    # el secreto de la CMF (no se imprime)
+    from google.colab import userdata
+    _cmf_ok = bool(os.environ.get("CMF_API_KEY") or userdata.get("CMF_API_KEY"))
+except Exception:
+    _cmf_ok = bool(os.environ.get("CMF_API_KEY"))
+
+print("=" * 78)
+print(f" MODO = {os.environ['PIPELINE_MODE']}   |   grupos parciales = {PERMITIR_GRUPOS_PARCIALES or '-'}")
+print(f" Secreto CMF_API_KEY: {'OK' if _cmf_ok else 'FALTA (Secretos de Colab; sin él la celda de TMC falla)'}")
+if os.environ["PIPELINE_MODE"] != "dry_run":
+    print(" !!!! ESTA CORRIDA ESCRIBE EN BIGQUERY !!!!")
+else:
+    print(" Modo seguro: no se escribe nada en BigQuery (la compuerta solo valida y compara).")
+print("=" * 78)
+'''
+
 COMMIT_CELL = r'''# ==============================================================================
 # V12 — PUBLICACIÓN FINAL (ejecutar al FINAL). Valida y publica los grupos de tablas.
 # stage: aquí se escribe en BigQuery, grupo por grupo. Un grupo con error se retiene completo
@@ -115,7 +148,7 @@ Ver `forecast_hardening/REPORTE_REVISION.md`. Resumen: reloj único de Chile (`h
 publicación por grupos con chequeos entre tablas (`GATE`, modo `PIPELINE_MODE`=stage|live|dry_run),
 corrección de features de lag del modelo V5 cuando el mes aún no tiene datos (día 1), escritura atómica de
 `.pkl`, secreto de la CMF fuera del notebook, TMC con año actual, guardas de re-ejecución.
-Primera celda de código = helper V12; última = publicación."""
+Primera celda de código = configuración (única que se edita); luego el helper V12; la última = publicación."""
 
 
 class Patcher:
@@ -320,6 +353,7 @@ fechas_proy  = pd.date_range(start=fecha_inicio, end=fecha_fin, freq='D')""", ta
     helper = HELPER.replace("@@PUBLISH_GATE@@", gate_src)
     first_code = next(i for i, c in enumerate(nb.cells) if code(i))
     nb.cells.insert(first_code, nbformat.v4.new_code_cell(helper))
+    nb.cells.insert(first_code, nbformat.v4.new_code_cell(CONFIG_CELL))   # queda ANTES del helper
     nb.cells.append(nbformat.v4.new_code_cell(COMMIT_CELL))
     nb.cells[0].source = nb.cells[0].source.replace("Script_Diario V11 (30-09-2026)", "Script_Diario V12 blindado (base V11 30-09-2026)") + MD_NOTE
     # sin outputs (la V11 trae 1.8 MB de salidas de una corrida real)

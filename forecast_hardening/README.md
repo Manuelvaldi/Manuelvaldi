@@ -1,6 +1,6 @@
 # forecast_hardening
 
-Ver `REPORTE_REVISION.md`.
+Ver `REPORTE_REVISION.md` y `COMO_EJECUTAR_V12.md`.
 
 ```bash
 pip install pandas==2.2.3 "numpy<2.1" xgboost scikit-learn matplotlib seaborn openpyxl nbformat pytest pyarrow requests
