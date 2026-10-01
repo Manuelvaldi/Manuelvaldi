@@ -52,6 +52,12 @@ Por tabla: no vacía, sin infinitos, sin duplicados por clave, columnas y tipos 
 
 Los 10 grupos quedaron `OK(dry_run)`, **0 BLOCK**. Contra las tablas vigentes en BigQuery no hubo columnas perdidas ni tipos incompatibles (solo `pipeline_audit` sin línea base: aún no existe). Los chequeos entre tablas de `kpi_core` (mismo mes, suma de productos = GPV App en días futuros, MAU App = subcategorías, desglose reactive) pasaron con datos reales. Avisos (WARN): (a) `forecasting_gpv_productos` trae 4 columnas nuevas `rev_ci/co_*_real_pred`, las agregadas en V11, que la tabla vigente aún no tenía; (b) `forecast_le_insurance` tiene valores negativos en `gpv` (probables devoluciones netas en `economics`; por verificar). La celda final ahora también compara, en `dry_run`, lo que se publicaría contra lo vigente en BigQuery (`GATE.compare_with_bq()`).
 
+## Corrida real en día 1 (1-oct-2026) y su comparación
+
+* **Hallazgo #13 (día 1):** `convertir_a_clp_seguro` (celda de revenue CI/CO) lanzaba `TypeError: boolean value of NA is ambiguous` cuando la columna real del mes venía toda `<NA>` (`Int64`), es decir el día 1. Existía en la V11 (reproducido); corregido en V12.
+* Con datos reales, `forecasting_le_seguros` **sí** se generó el día 1 (217 filas = 31 días × 7), así que la sospecha del hallazgo #3 (tabla principal vacía) no se reprodujo para esa tabla. Queda por revisar `forecasting_le_seguros_stock` (no apareció entre las tablas comparadas: posible tabla vacía el día 1 y grupo `seguros` retenido por la compuerta).
+* La comparación contra BigQuery de ese día **no es una prueba válida**: BigQuery tenía la publicación del 30-sep (mes de septiembre, 30 filas) y la corrida era del 1-oct (31 filas); todo difiere por el cambio de mes/ventanas móviles. La prueba limpia exige correr la V11 (publicando) y la V12 en `dry_run` el mismo día, en un día normal.
+
 ## Sobre TimesFM (medido en Colab con datos reales)
 
 * Usa **TimesFM 2.5** (Apache-2.0). Los pesos de 3.0 son no comerciales/no producción según el README del paquete.
