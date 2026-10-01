@@ -304,6 +304,15 @@ _V12_GPV_ESCALADO = True""", tag="guarda division 1e6")
                        f"{fecha_max.date()}: cargar los targets del periodo siguiente (celda 'TARGETS MENSUALES').")
 fechas_proy  = pd.date_range(start=fecha_inicio, end=fecha_fin, freq='D')""", tag="targets vencidos")
 
+    # ------------------------------------------------------------- G2. dia 1: columna real toda NA (Int64) rompia la heuristica
+    cu = [i for i, c in enumerate(nb.cells) if code(i) and "def convertir_a_clp_seguro" in c.source]
+    assert len(cu) == 1
+    p.rep(cu[0], """    promedio = df[col_name].mean()""",
+          """    # V12: en el dia 1 la columna REAL del mes viene toda NA (Int64): mean() = <NA> y `<NA> > x` lanzaba
+    # TypeError. Se pasa a float (NaN) y se compara solo si hay dato; sin dato la conversion deja NA igual.
+    promedio = pd.to_numeric(df[col_name], errors="coerce").astype(float).mean()""", tag="dia1 NA en conversion CLP")
+    p.rep(cu[0], "    if promedio > 500000:", "    if pd.notna(promedio) and promedio > 500000:", tag="dia1 NA en conversion CLP")
+
     # ------------------------------------------------------------- H. helper (1ra celda) + commit (ultima) + nota md
     gate_src = (HERE / "publish_gate.py").read_text()
     gate_src = gate_src.replace("from __future__ import annotations\n", "")

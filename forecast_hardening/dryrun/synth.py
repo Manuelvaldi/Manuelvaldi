@@ -72,6 +72,7 @@ def cico(today: pd.Timestamp, tipo: str) -> pd.DataFrame:
         trx = daily("2023-01-01", end, lvl, tipo + seg, dom_spikes={1: 1.3, 30: 1.2})
         gpv = trx * 25000
         df = _frame(trx.round(), f"trx_{tipo}", {col_seg: seg})
+        df[f"trx_{tipo}"] = df[f"trx_{tipo}"].astype("Int64")      # BigQuery INTEGER llega como Int64 (nullable)
         df[f"gpv_{tipo}"] = gpv.values
         out.append(df)
     return pd.concat(out, ignore_index=True)
