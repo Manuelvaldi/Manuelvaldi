@@ -55,6 +55,10 @@ _TABLE2GROUP = {t: g for g, ts in GROUPS.items() for t in ts}
 _KEY_HELPERS = ["linea", "producto", "identificador", "category_type", "payment_method_recod", "segmento",
                 "categoria", "mes_anterior", "fecha_ejecucion", "status", "tipo"]
 
+# tablas cuyo tamaño cambia a propósito (reset mensual / acumulación) o que tienen varias filas por fecha
+_ROWCOUNT_EXEMPT = {"captaciones_monitoreo_le", "pipeline_audit"}
+_NO_DUP_CHECK = {"one_page_cuenta_remunerada", "pipeline_audit", "captaciones_monitoreo_le"}
+
 _DML = re.compile(r"^\s*(DELETE|INSERT|UPDATE|MERGE|CREATE|DROP|TRUNCATE|ALTER)\b", re.I)
 
 
@@ -242,7 +246,7 @@ class PublishGate:
             add("BLOCK", "hay valores infinitos")
         if df.isna().all(axis=None):
             add("BLOCK", "todo NaN")
-        if "fecha" in df.columns:
+        if "fecha" in df.columns and op["short"] not in _NO_DUP_CHECK:
             key = ["fecha"] + [c for c in _KEY_HELPERS if c in df.columns]
             d = int(df.duplicated(subset=key).sum())
             if d:
@@ -274,7 +278,7 @@ class PublishGate:
                                 and not (a == "TEMPORAL" and bcls == "STRING"):
                             lvl = "WARN" if self.allow_schema_drift else "BLOCK"
                             add(lvl, f"tipo de '{c}': {a} vs BQ {bcls}")
-                if b["rows"] and op["mode"] == "replace" and len(df) < 0.5 * b["rows"]:
+                if b["rows"] and op["mode"] == "replace" and op["short"] not in _ROWCOUNT_EXEMPT and len(df) < 0.5 * b["rows"]:
                     add("BLOCK", f"filas {len(df)} < 50% de las vigentes ({b['rows']})")
         return out
 
@@ -414,7 +418,10 @@ class PublishGate:
                         frames[o["short"]] = o["df"]
             req = [t for t in GROUPS.get(g, []) if t not in {o["short"] for o in ops_eff}]
             if g in GROUPS and req:
-                res["issues"].append(dict(level="BLOCK", msg=f"faltan tablas del grupo (no se generaron): {req}"))
+                parcial = g in {x.strip() for x in os.environ.get("PIPELINE_ALLOW_PARTIAL", "").split(",") if x.strip()}
+                res["issues"].append(dict(level="WARN" if parcial else "BLOCK",
+                                          msg=f"faltan tablas del grupo (no se generaron): {req}"
+                                              + (" [PIPELINE_ALLOW_PARTIAL: se publica lo que existe]" if parcial else "")))
             if g == "kpi_core":
                 res["issues"] += self.cross_checks(frames)
             blocks = [i for i in res["issues"] if i["level"] == "BLOCK"]

@@ -177,3 +177,38 @@ def test_compare_with_bq_detecta_cambios_de_valor_y_de_filas(world, gate_factory
     # el stub responde 'SELECT * FROM `tabla`' con world.baseline
     res = g.compare_with_bq().set_index("tabla")["estado"].to_dict()
     assert res == {"colocacion_90": "DIFIERE", "entrega_tarjetas": "IGUAL", "le_colocacion": "DIFIERE"}
+
+
+def test_reset_mensual_del_monitoreo_no_se_bloquea_por_caida_de_filas(world, gate_factory):
+    make, pg = gate_factory
+    g = make("stage")
+    g.baseline = lambda table: dict(schema={"fecha": "TEMPORAL", "x": "FLOAT"},
+                                    rows=431 if table.endswith("captaciones_monitoreo_le") else 31)
+    from google.cloud import bigquery
+    c = bigquery.Client()
+    cfg = bigquery.LoadJobConfig(write_disposition=bigquery.WriteDisposition.WRITE_TRUNCATE)
+    for t in ("captaciones_monitoreo_le", "forecasting_le_captacion", "forecasting_le_captacion_90d"):
+        c.load_table_from_dataframe(_df(31), f"tenpo-bi-prod.kpitos.{t}", job_config=cfg).result()
+    st = g.commit_all()
+    assert st[0]["status"] == "OK" and len(world.writes) == 3
+
+
+def test_varias_filas_por_fecha_en_one_page_no_es_duplicado(world, gate_factory):
+    make, pg = gate_factory
+    g = make("stage")
+    import pandas_gbq
+    d = pd.concat([_df(5), _df(5)])
+    pandas_gbq.to_gbq(d, "kpitos.one_page_cuenta_remunerada", project_id="p", if_exists="replace")
+    pandas_gbq.to_gbq(_df(3), "kpitos.tmc", project_id="p", if_exists="replace")
+    g.commit_all()
+    assert len(world.writes) == 2
+
+
+def test_allow_partial_publica_lo_que_existe(world, gate_factory, monkeypatch):
+    make, pg = gate_factory
+    monkeypatch.setenv("PIPELINE_ALLOW_PARTIAL", "referencias")
+    g = make("stage")
+    import pandas_gbq
+    pandas_gbq.to_gbq(_df(3), "kpitos.tmc", project_id="p", if_exists="replace")            # falta one_page
+    g.commit_all()
+    assert [w["table"] for w in world.writes] == ["kpitos.tmc"]
