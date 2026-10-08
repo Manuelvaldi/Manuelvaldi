@@ -1,0 +1,673 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Simulador PLV Tenpo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cabin:wght@500;700&family=Open+Sans:wght@400;600;700&display=swap">
+<style>
+/* Layout: panel de supuestos a la izquierda (pestañas Base/Propuesta), resultados comparados a la derecha. Paleta Tenpo. */
+:root {
+  --bg: #EEEEEE; --panel: #FFFFFF; --panel-2: #F6F6F6; --fg: #2A2A2A; --muted: #5E625F; --line: #DADDDB;
+  --accent: #03FF94; --accent-ink: #00843D; --accent-soft: #D9FFEC; --ink-on-accent: #000000;
+  --base: #8C8F8D; --prop: #00AA4F; --neg: #D64545; --warn: #C98A00;
+  --tramo-buen: #00AA4F; --tramo-medio: #E0A800; --tramo-bajo: #8C8F8D; --tramo-destr: #E05353;
+  --f-display: "Cabin", "Open Sans", system-ui, sans-serif; --f-body: "Open Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #111312; --panel: #1C1E1D; --panel-2: #232624; --fg: #ECEEEC; --muted: #A3A8A5; --line: #333735;
+  --accent: #03FF94; --accent-ink: #03FF94; --accent-soft: #10331F; --ink-on-accent: #000000;
+  --base: #9DA19F; --prop: #03FF94; --neg: #FF7A7A; --warn: #F2C14E;
+  --tramo-buen: #03FF94; --tramo-medio: #F2C14E; --tramo-bajo: #9DA19F; --tramo-destr: #FF7A7A; color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #111312; --panel: #1C1E1D; --panel-2: #232624; --fg: #ECEEEC; --muted: #A3A8A5; --line: #333735;
+  --accent: #03FF94; --accent-ink: #03FF94; --accent-soft: #10331F; --ink-on-accent: #000000;
+  --base: #9DA19F; --prop: #03FF94; --neg: #FF7A7A; --warn: #F2C14E;
+  --tramo-buen: #03FF94; --tramo-medio: #F2C14E; --tramo-bajo: #9DA19F; --tramo-destr: #FF7A7A; color-scheme: dark; }
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font-family: var(--f-body); font-size: 14px; line-height: 1.45; }
+.wrap { max-width: 1240px; margin: 0 auto; padding-inline: 20px; padding-block: 20px 40px; }
+header.top { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px 24px; padding-bottom: 16px; border-bottom: 1px solid var(--line); }
+.brand { display: flex; align-items: center; gap: 10px; font-family: var(--f-display); font-weight: 700; letter-spacing: .02em; }
+.brand i { display: inline-block; width: 10px; height: 26px; background: var(--accent); }
+h1 { font-family: var(--f-display); font-size: clamp(24px, 3.2vw, 34px); margin: 4px 0 0; font-weight: 700; text-wrap: balance; }
+.sub { color: var(--muted); margin: 4px 0 0; max-width: 70ch; }
+.flag { display: inline-flex; align-items: center; gap: 8px; background: var(--accent-soft); color: var(--fg); border-radius: 999px; padding: 6px 12px; font-size: 12.5px; }
+.flag b { color: var(--accent-ink); }
+
+.grid { display: grid; grid-template-columns: minmax(300px, 400px) minmax(0, 1fr); gap: 20px; margin-top: 20px; align-items: start; }
+@media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+
+.panel { background: var(--panel); border-radius: 10px; padding: 16px; min-width: 0; }
+.tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; background: var(--panel-2); padding: 4px; border-radius: 8px; }
+.tabs button { border: 0; border-radius: 6px; padding: 9px 8px; font: 600 13.5px var(--f-body); background: transparent; color: var(--muted); cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; }
+.tabs button .dot { width: 9px; height: 9px; border-radius: 50%; }
+.tabs button[aria-selected="true"] { background: var(--panel); color: var(--fg); box-shadow: 0 1px 2px rgba(0,0,0,.12); }
+.tools { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0 4px; }
+.btn { border: 1px solid var(--line); background: var(--panel); color: var(--fg); border-radius: 6px; padding: 6px 10px; font: 600 12.5px var(--f-body); cursor: pointer; }
+.btn:hover { border-color: var(--accent-ink); }
+.btn.solid { background: var(--accent); color: var(--ink-on-accent); border-color: var(--accent); }
+button:focus-visible, input:focus-visible, summary:focus-visible { outline: 2px solid var(--accent-ink); outline-offset: 2px; }
+
+.presets { margin-top: 10px; padding: 10px; border-radius: 8px; background: var(--panel-2); }
+.presets h3 { margin: 0 0 6px; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.presets .tools { margin: 0; }
+.presets p { margin: 6px 0 0; font-size: 11.5px; color: var(--muted); }
+
+fieldset { border: 0; padding: 0; margin: 16px 0 0; }
+legend { font-size: 12px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); font-weight: 700; padding: 0; margin-bottom: 6px; }
+.param { display: grid; grid-template-columns: 1fr 104px; gap: 4px 10px; align-items: center; padding: 7px 0; border-top: 1px solid var(--line); }
+.param label { font-size: 13px; min-width: 0; }
+.param .src { display: inline-block; font-size: 10.5px; padding: 1px 6px; border-radius: 4px; margin-left: 4px; background: var(--panel-2); color: var(--muted); vertical-align: 1px; white-space: nowrap; }
+.param .src.cc { background: var(--accent-soft); color: var(--accent-ink); }
+.param .src.tp { background: var(--accent-soft); color: var(--accent-ink); }
+.param input[type="number"] { width: 100%; font: 600 13px var(--f-body); font-variant-numeric: tabular-nums; text-align: right; padding: 5px 6px; border: 1px solid var(--line); border-radius: 5px; background: var(--panel-2); color: var(--fg); }
+.param input[type="range"] { grid-column: 1 / -1; width: 100%; accent-color: var(--prop); margin: 0; }
+.param.changed input[type="number"] { border-color: var(--prop); }
+.param .hint { grid-column: 1 / -1; font-size: 11.5px; color: var(--muted); }
+.toggle { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-top: 1px solid var(--line); font-size: 13px; }
+
+.results { display: grid; gap: 16px; min-width: 0; }
+.kpis { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+@media (max-width: 560px) { .kpis { grid-template-columns: 1fr; } }
+.scen { background: var(--panel); border-radius: 10px; padding: 16px; border-top: 4px solid var(--base); min-width: 0; }
+.scen.prop { border-top-color: var(--prop); }
+.scen h2 { margin: 0; font-size: 13px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); }
+.ratio { font-family: var(--f-display); font-size: clamp(36px, 5vw, 48px); font-weight: 700; line-height: 1.05; margin-top: 6px; font-variant-numeric: tabular-nums; }
+.pill { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 700; padding: 3px 10px; border-radius: 999px; margin-top: 6px; color: var(--fg); background: var(--panel-2); }
+.pill::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: var(--c, var(--base)); }
+.mini { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; margin-top: 12px; font-size: 13px; }
+.mini dt { color: var(--muted); }
+.mini dd { margin: 0; text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
+.delta { font-size: 12.5px; margin-top: 8px; font-weight: 600; }
+.delta.up { color: var(--accent-ink); } .delta.down { color: var(--neg); }
+
+.card { background: var(--panel); border-radius: 10px; padding: 16px; min-width: 0; }
+.card h3 { margin: 0 0 4px; font-size: 15px; }
+.card .note { margin: 0 0 10px; color: var(--muted); font-size: 12.5px; }
+.legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend i { width: 14px; height: 4px; border-radius: 2px; display: inline-block; }
+
+table.wf { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+table.wf th, table.wf td { padding: 7px 6px; border-bottom: 1px solid var(--line); text-align: right; }
+table.wf th:first-child, table.wf td:first-child { text-align: left; }
+table.wf th { font-size: 11.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); font-weight: 700; }
+table.wf tr.total td { font-weight: 700; border-bottom: 0; border-top: 2px solid var(--fg); }
+table.wf td.neg { color: var(--neg); }
+.barcell { width: 34%; }
+.bar { position: relative; height: 10px; }
+.bar .z { position: absolute; left: 50%; top: -3px; bottom: -3px; width: 1px; background: var(--line); }
+.bar .b, .bar .p { position: absolute; height: 5px; border-radius: 2px; }
+.bar .b { top: 0; background: var(--base); } .bar .p { top: 5px; background: var(--prop); }
+.scroll { overflow-x: auto; }
+
+svg text { fill: var(--muted); font: 11px var(--f-body); }
+.chart-wrap { width: 100%; }
+
+details.how { background: var(--panel); border-radius: 10px; padding: 14px 16px; }
+details.how summary { cursor: pointer; font-weight: 700; }
+details.how ul { margin: 10px 0 0; padding-left: 18px; color: var(--fg); }
+details.how li { margin: 4px 0; max-width: 90ch; }
+details.how code { font-size: 12.5px; background: var(--panel-2); padding: 1px 5px; border-radius: 4px; }
+.warnbox { border-left: 3px solid var(--warn); padding: 8px 12px; background: var(--panel); border-radius: 0 8px 8px 0; font-size: 12.5px; color: var(--fg); }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+<style>body { margin: 0; } img { max-width: 100%; } [hidden] { display: none !important; }</style>
+</head>
+<body>
+<style>
+/* v4: ayuda plegable, tornado, tooltip del gráfico, comparación Credicorp */
+.param .lab { display: flex; align-items: center; gap: 6px; min-width: 0; flex-wrap: wrap; }
+.qbtn { width: 18px; height: 18px; border-radius: 50%; border: 1px solid var(--line); background: var(--panel-2); color: var(--muted); font: 700 11px var(--f-body); cursor: pointer; padding: 0; line-height: 16px; flex: none; }
+.qbtn[aria-expanded="true"] { background: var(--accent-soft); color: var(--accent-ink); border-color: var(--accent-ink); }
+.param .hint.why { display: none; }
+.param .hint.why.open { display: block; }
+.seg-toggle { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.seg-toggle .btn[aria-pressed="true"] { background: var(--accent); color: var(--ink-on-accent); border-color: var(--accent); }
+.share { display: grid; grid-template-columns: 1fr auto; gap: 6px; margin-top: 8px; }
+.share input { min-width: 0; font: 12px var(--f-body); padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--fg); }
+.msg { font-size: 11.5px; color: var(--accent-ink); min-height: 1em; margin: 6px 0 0; }
+.chart-wrap { position: relative; }
+.tip { position: absolute; pointer-events: none; max-width: calc(100vw - 8px); box-sizing: border-box; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; font-size: 12px; font-variant-numeric: tabular-nums; box-shadow: 0 2px 8px rgba(0,0,0,.15); white-space: nowrap; }
+.tip b { display: block; margin-bottom: 2px; }
+.tip span { display: flex; gap: 8px; justify-content: space-between; }
+.cardhead { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 6px 12px; }
+.tornado { display: grid; grid-template-columns: minmax(120px, 210px) 1fr; gap: 6px 10px; align-items: center; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.tornado .tl { text-align: right; color: var(--fg); min-width: 0; }
+.tornado .tl small { display: block; color: var(--muted); font-size: 11px; }
+.tbar { position: relative; height: 20px; }
+.tbar .z { position: absolute; left: 50%; top: -2px; bottom: -2px; width: 1px; background: var(--fg); opacity: .4; }
+.tbar .lo, .tbar .hi { position: absolute; top: 3px; height: 14px; border-radius: 2px; }
+.tbar .lo { background: var(--neg); opacity: .75; } .tbar .hi { background: var(--prop); }
+.tbar em { position: absolute; top: 2px; font-style: normal; font-size: 11px; color: var(--muted); }
+.cmp td.hl { font-weight: 700; }
+.note2 { font-size: 12px; color: var(--muted); margin: 8px 0 0; }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div>
+      <div class="brand"><i aria-hidden="true"></i>tenpo · Planificación</div>
+      <h1>Simulador PLV · Tarjeta de crédito</h1>
+      <p class="sub">Calcula el margen operativo directo (MOD) de una tarjeta durante su vida, con la misma estructura del PLV de Credicorp. Ajusta los supuestos de la propuesta y compárala contra la base.</p>
+    </div>
+    <div class="flag" role="note"><b>Calibrado con datos Tenpo</b> (oct-25 a sep-26) y parámetros del PLV de Credicorp. Siguen ilustrativos: CAC y forma de la PD.</div>
+  </header>
+
+  <div class="grid">
+    <!-- Supuestos -->
+    <section class="panel" aria-label="Supuestos">
+      <div class="tabs" role="tablist" aria-label="Escenario a editar">
+        <button id="tab-base" role="tab" aria-selected="true" data-s="base"><span class="dot" style="background:var(--base)"></span>Base</button>
+        <button id="tab-prop" role="tab" aria-selected="false" data-s="prop"><span class="dot" style="background:var(--prop)"></span>Propuesta</button>
+      </div>
+      <div class="tools">
+        <button class="btn" id="copy">Copiar Base a Propuesta</button>
+        <button class="btn" id="reset">Restablecer valores</button>
+      </div>
+
+      <div class="presets">
+        <h3>Supuesto de pérdida dado default</h3>
+        <div class="seg-toggle" role="group" aria-label="Supuesto de pérdida">
+          <button class="btn" id="m-riesgo" aria-pressed="true">Riesgo · LGD 58%, EAD 1,35×</button>
+          <button class="btn" id="m-contable" aria-pressed="false">Contable · por segmento</button>
+        </div>
+        <p id="m-help"></p>
+      </div>
+
+      <div class="presets" id="perfiles">
+        <h3>Cargar perfil calibrado en el escenario que editas</h3>
+        <div class="tools" role="group" aria-label="Perfil calibrado">
+          <button class="btn" data-perfil="Cartera">Cartera</button>
+          <button class="btn" data-perfil="XS">XS</button>
+          <button class="btn" data-perfil="Small">Small</button>
+          <button class="btn" data-perfil="Medium">Medium</button>
+          <button class="btn" data-perfil="Large">Large</button>
+        </div>
+        <p id="perfil-actual"></p>
+      </div>
+
+      <div class="presets" id="presets">
+        <h3>Probar una medida en la Propuesta</h3>
+        <div class="tools">
+          <button class="btn" data-preset="memb">Cobrar membresía</button>
+          <button class="btn" data-preset="csi">Más cuotas sin interés</button>
+          <button class="btn" data-preset="loy">Bajar loyalty</button>
+          <button class="btn" data-preset="fon">Fondeo +100 pb</button>
+        </div>
+        <p>Cada medida parte de la Base y ajusta también la fuga o el GPV con un efecto supuesto (ilustrativo). Revísalo en los supuestos.</p>
+      </div>
+
+      <div class="presets">
+        <h3>Compartir este escenario</h3>
+        <div class="tools">
+          <button class="btn" id="share-copy">Copiar código</button>
+          <button class="btn" id="export">Copiar resultados para Excel</button>
+        </div>
+        <div class="share">
+          <input id="share-in" type="text" placeholder="Pega aquí un código de escenario" aria-label="Código de escenario">
+          <button class="btn" id="share-load">Cargar</button>
+        </div>
+        <p class="msg" id="share-msg" role="status"></p>
+        <p>El código guarda Base y Propuesta. También puedes agregarlo al final del link, después de <code>#</code>, para que se abra cargado.</p>
+      </div>
+      <div id="params"></div>
+    </section>
+
+    <!-- Resultados -->
+    <section class="results" aria-label="Resultados">
+      <div class="kpis">
+        <article class="scen" id="k-base"></article>
+        <article class="scen prop" id="k-prop"></article>
+      </div>
+
+      <div class="card">
+        <h3>MOD acumulado por tarjeta, en valor presente</h3>
+        <p class="note">Por cada tarjeta originada, ponderado por supervivencia y descontado. Pasa el cursor para ver cada mes. Con el CAC activado, la línea punteada marca el CAC y el punto indica el mes de payback.</p>
+        <div class="legend"><span><i style="background:var(--base)"></i>Base</span><span><i style="background:var(--prop)"></i>Propuesta</span></div>
+        <div class="chart-wrap" id="chart"></div>
+      </div>
+
+      <div class="card">
+        <div class="cardhead"><h3>¿Qué supuesto mueve más el resultado?</h3>
+          <div class="seg-toggle" role="group" aria-label="Escenario del análisis" style="min-width:220px">
+            <button class="btn" id="t-base" aria-pressed="false">Base</button>
+            <button class="btn" id="t-prop" aria-pressed="true">Propuesta</button>
+          </div></div>
+        <p class="note">Cambio en MOD / saldo (puntos porcentuales) al subir o bajar cada supuesto un 10%. Verde: el supuesto sube. Rojo: el supuesto baja.</p>
+        <div class="tornado" id="tornado"></div>
+      </div>
+
+      <div class="card">
+        <h3>Resultado por segmento</h3>
+        <p class="note">Cada perfil calibrado con sus propios datos (oct-25 a sep-26), con el supuesto de pérdida elegido. Marca, procesadora, CAC, forma de la PD y horizonte son comunes y salen de la Base.</p>
+        <div class="scroll"><table class="wf" id="segtab"></table></div>
+      </div>
+
+      <div class="card">
+        <h3>PLV de Credicorp vs simulador</h3>
+        <p class="note">Ratios anuales sobre saldo hábil, 60 meses, cartera completa. Credicorp: 160 cajas (plástico × PD × renta × cupo) ponderadas por tarjetas. Simulador: perfil Cartera con el supuesto de pérdida elegido.</p>
+        <div class="scroll"><table class="wf cmp" id="cmp"></table></div>
+        <p class="note2" id="cmp-note"></p>
+      </div>
+
+      <div class="card">
+        <h3>De dónde sale el MOD</h3>
+        <p class="note">Valor presente por tarjeta originada, por componente. Barra superior: Base. Inferior: Propuesta.</p>
+        <div class="scroll"><table class="wf" id="wf"></table></div>
+      </div>
+
+      <details class="how">
+        <summary>Cómo se calcula y de dónde salen los datos</summary>
+        <ul>
+          <li><b>MFN</b> = ingreso financiero − costo de fondeo − pérdida esperada. El ingreso financiero sale de las cuotas con interés y los avances; las cuotas sin interés no generan interés pero sí consumen fondeo y riesgo.</li>
+          <li><b>Pérdida esperada</b> = EAD × PD × LGD, con EAD = saldo del mes × deuda al default. Dos supuestos: <b>Riesgo</b> (LGD 58%, EAD 1,35×, los del PLV de Credicorp, entregados por Riesgo) y <b>Contable</b> (1 − recuperos / castigos y castigo medio / saldo medio, por segmento). El contable tiende a sobrestimar la pérdida porque no cuenta lo que el cliente paga entre el default y el castigo, y el castigo puede incluir intereses devengados.</li>
+          <li><b>INOF neto</b> = ingresos por servicios (merchant fee, seguros, markup y comisiones, como % del GPV) + membresía − costo de loyalty.</li>
+          <li><b>Costos lifetime</b> = costo de marca + costo de procesadora, como % del GPV (estructura y tasas del PLV de Credicorp).</li>
+          <li><b>Supervivencia</b>: cada mes sobrevive (1 − PD mensual) × (1 − fuga mensual). Todo se pondera por ella.</li>
+          <li><b>Saldo hábil</b> = cupo × utilización, que se construye en los primeros meses (rampa). Incluye cuotas con y sin interés y avances.</li>
+          <li><b>MOD / saldo hábil</b> = MOD total ÷ saldo hábil total × 12, sin descontar, a 60 meses: el mismo cálculo del PLV de Credicorp.</li>
+          <li><b>Calibración Tenpo</b> (oct-25 a sep-26): MAE.Cuentas (cupo, estados, mora), colocación oficial, revenue app TC, economics (GPV TC), misiones de loyalty y costo de riesgo. Perfiles por segmento de <code>fct_tipo_users_tc</code>. XS casi no tiene pérdidas y cancela mucho: probablemente es la tarjeta con garantía (no verificado) y no está en el PLV de Credicorp, que cubre BLACK y STANDARD.</li>
+          <li><b>Diferencias con Credicorp que siguen abiertas</b>: su curva de PD parte en cero los dos primeros meses y crece con la antigüedad (la tomaron de otras entidades); aquí la PD es plana y medida sobre la cartera completa. Su cancelación es 0,3% mensual (dato de Producto) y la medida en Small, Medium y Large es ~0,2%.</li>
+        </ul>
+      </details>
+    </section>
+  </div>
+</div>
+
+<script>
+(() => {
+  // ---------------- supuestos ----------------
+  // src: cc = Credicorp, tp = Tenpo (dato), il = ilustrativo
+  const P = [
+    { g: "Perfil y saldo", k: "cupo", l: "Cupo", u: "$", min: 100000, max: 5000000, step: 5000, v: 1135000, src: "tp", why: "Promedio de cuentas Normal del perfil, MAE oct-25 a sep-26." },
+    { g: "Perfil y saldo", k: "util", l: "Utilización del cupo", u: "%", min: 5, max: 95, step: 1, v: 43, src: "tp", why: "Colocación oficial / cupo de las tarjetas vivas." },
+    { g: "Perfil y saldo", k: "ramp", l: "Meses para construir el saldo", u: "m", min: 1, max: 24, step: 1, v: 7, src: "tp", why: "La utilización según antigüedad se estabiliza cerca del mes 7 (MAE sep-26)." },
+    { g: "Perfil y saldo", k: "gi", l: "Cuotas con interés (% saldo)", u: "%", min: 0, max: 100, step: 1, v: 49, src: "tp", why: "Colocación con interés / colocación total (incluye avances)." },
+    { g: "Perfil y saldo", k: "av", l: "Avances (% saldo)", u: "%", min: 0, max: 50, step: 1, v: 0, src: "tp", hint: true, why: "No se separan en la colocación: van dentro de cuotas con interés." },
+    { g: "Perfil y saldo", k: "gpv", l: "Compras al mes (GPV)", u: "$", min: 0, max: 1500000, step: 1000, v: 159000, src: "tp", why: "GPV TC (economics, líneas TC física y virtual) / tarjetas vivas." },
+    { g: "Tasas", k: "rrev", l: "Tasa efectiva cuotas con interés, mensual", u: "%", min: 0, max: 5, step: 0.01, v: 3.43, src: "tp", why: "Revenue TC financiero / colocación con interés. Por perfil se usa el mix con interés de la cartera (49%). Tarifa: 3,57%; Credicorp usa 3,45% (2,87% en BLACK de cupo alto)." },
+    { g: "Tasas", k: "rav", l: "Tasa avances, mensual", u: "%", min: 0, max: 5, step: 0.01, v: 3.43, src: "tp", why: "Solo aplica si se separan avances." },
+    { g: "Tasas", k: "fondeo", l: "Costo de fondeo, anual", u: "%", min: 0, max: 20, step: 0.01, v: 8.28, src: "cc", why: "Tasa de transferencia del PLV de Credicorp: 0,69% mensual." },
+    { g: "Tasas", k: "desc", l: "Tasa de descuento, anual", u: "%", min: 0, max: 30, step: 0.1, v: 10.4, src: "tp", why: "La de nuestro CLTV. Solo afecta el valor presente; el ratio MOD / saldo no se descuenta, igual que en Credicorp." },
+    { g: "Riesgo", k: "pd", l: "PD del primer año", u: "%", min: 0, max: 40, step: 0.1, v: 10.8, src: "tp", why: "Cuentas sanas a sep-25 que llegan a 90+ días o castigo en 12 meses (9 meses observables), anualizado." },
+    { g: "Riesgo", k: "pdtail", l: "PD después del año 1 (× año 1)", u: "×", min: 0, max: 2, step: 0.05, v: 1, src: "il", why: "La PD medida es de la cartera completa, por eso se deja plana. La curva de Credicorp crece con la antigüedad." },
+    { g: "Riesgo", k: "lgd", l: "LGD", u: "%", min: 0, max: 100, step: 1, v: 58, src: "cc", why: "Depende del supuesto de pérdida elegido arriba: Riesgo (58%, PLV de Credicorp) o Contable (1 − recuperos / castigos)." },
+    { g: "Riesgo", k: "ead", l: "Deuda al default (× saldo promedio)", u: "×", min: 0.5, max: 3, step: 0.01, v: 1.35, src: "cc", why: "Depende del supuesto de pérdida: Riesgo (1,35×, PLV de Credicorp) o Contable (castigo medio / saldo medio del perfil)." },
+    { g: "Ingresos no financieros", k: "mf", l: "Ingresos por servicios (% GPV)", u: "%", min: 0, max: 4, step: 0.01, v: 1.51, src: "tp", why: "Revenue TC servicios / GPV TC. Incluye merchant fee, seguros, markup y comisiones. En Credicorp: intercambio 1% + markup 0,13% del GPV + seguros." },
+    { g: "Ingresos no financieros", k: "intl", l: "Compras internacionales (% GPV)", u: "%", min: 0, max: 50, step: 1, v: 0, src: "tp", why: "Incluido en servicios. Úsalo solo para simular un cambio de markup." },
+    { g: "Ingresos no financieros", k: "markup", l: "Markup internacional adicional", u: "%", min: 0, max: 6, step: 0.1, v: 0, src: "tp", why: "Incluido en servicios." },
+    { g: "Ingresos no financieros", k: "seg", l: "Seguros netos adicionales al mes", u: "$", min: 0, max: 5000, step: 50, v: 0, src: "tp", why: "Incluido en servicios." },
+    { g: "Ingresos no financieros", k: "memb", l: "Membresía al mes", u: "$", min: 0, max: 10000, step: 100, v: 0, src: "tp", why: "Hoy no se cobra mantención." },
+    { g: "Costos", k: "loy", l: "Costo de loyalty (% GPV)", u: "%", min: 0, max: 3, step: 0.01, v: 0.62, src: "tp", why: "Tenpesos de misiones CREDIT_CARD / GPV TC. Credicorp usa 0,35% del GPV." },
+    { g: "Costos", k: "marca", l: "Costo de marca (% GPV)", u: "%", min: 0, max: 2, step: 0.01, v: 0.47, src: "cc", why: "PLV de Credicorp: 0,47% de las compras." },
+    { g: "Costos", k: "proc", l: "Costo de procesadora (% GPV)", u: "%", min: 0, max: 2, step: 0.01, v: 0.19, src: "cc", why: "PLV de Credicorp: 0,19% de las compras." },
+    { g: "Costos", k: "cac", l: "CAC por tarjeta", u: "$", min: 0, max: 150000, step: 1000, v: 25000, src: "il", why: "Sin dato específico de TC. El PLV de Credicorp no incluye CAC." },
+    { g: "Fuga y horizonte", k: "fuga", l: "Fuga mensual (cancelación)", u: "%", min: 0, max: 10, step: 0.05, v: 1.6, src: "tp", why: "Cuentas Normal que pasan a canceladas por el cliente al mes siguiente (mediana de 12 meses). XS concentra casi toda la cancelación. Credicorp usa 0,3%." },
+    { g: "Fuga y horizonte", k: "h", l: "Horizonte", u: "m", min: 12, max: 120, step: 6, v: 60, src: "cc", why: "El PLV de Credicorp reporta 12 y 60 meses." },
+  ];
+  const SRC = { cc: ["Credicorp", "cc"], tp: ["Tenpo", "tp"], il: ["Ilustrativo", ""] };
+  const DEF = Object.fromEntries(P.map(p => [p.k, p.v]));
+  // perfiles calibrados (lgd/ead contables por segmento)
+  const SEGS = {"Cartera": {"cupo": 1135000, "util": 43, "gi": 49, "av": 0, "gpv": 159000, "rrev": 3.43, "rav": 3.43, "pd": 10.8, "lgdC": 91, "eadC": 1.72, "mf": 1.51, "loy": 0.62, "fuga": 1.6, "n": 283000}, "XS": {"cupo": 166000, "util": 78.0, "gi": 49, "av": 0, "gpv": 79000, "rrev": 2.72, "rav": 2.72, "pd": 0.0, "lgdC": 61.0, "eadC": 1.0, "mf": 3.23, "loy": 0.27, "fuga": 6.5, "n": 62286}, "Small": {"cupo": 468000, "util": 57.0, "gi": 49, "av": 0, "gpv": 101000, "rrev": 3.3, "rav": 3.3, "pd": 14.6, "lgdC": 90.0, "eadC": 1.16, "mf": 1.27, "loy": 0.76, "fuga": 0.16, "n": 75127}, "Medium": {"cupo": 1224000, "util": 47.0, "gi": 49, "av": 0, "gpv": 176000, "rrev": 3.57, "rav": 3.57, "pd": 14.8, "lgdC": 92.0, "eadC": 1.33, "mf": 1.31, "loy": 0.68, "fuga": 0.17, "n": 116424}, "Large": {"cupo": 4562000, "util": 33.0, "gi": 49, "av": 0, "gpv": 405000, "rrev": 3.42, "rav": 3.42, "pd": 9.3, "lgdC": 92.0, "eadC": 2.55, "mf": 1.31, "loy": 0.59, "fuga": 0.22, "n": 30057}};
+  const RIESGO = { lgd: 58, ead: 1.35 };
+  // PLV Credicorp (plv_tenpo final.xlsm, hoja Outputs, 160 cajas ponderadas por tarjetas)
+  const CC = { tif: 0.2215, ef: -0.0828, pe: -0.1016, inof: 0.0411, cost: -0.0266, mod: 0.0516, destr: 0.223, black: 0.0673, standard: 0.0234, stdpd5: -0.0973 };
+  const KEY = "simulador-plv-v4";
+
+  const perfil = (k, modo) => { const { n, lgdC, eadC, ...v } = SEGS[k]; return { ...v, ...(modo === "contable" ? { lgd: lgdC, ead: eadC } : RIESGO), perfil: k }; };
+  let state = { base: { ...DEF, ...perfil("Cartera", "riesgo"), cacOn: false }, prop: null, edit: "base", modo: "riesgo", tor: "prop" }, fresh = true;
+  try { const s = JSON.parse(localStorage.getItem(KEY) || "null"); if (s && s.base && s.prop) { state = { ...state, ...s }; fresh = false; } } catch (e) {}
+  const save = () => { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} };
+
+  // ---------------- motor PLV ----------------
+  function plv(x) {
+    const H = Math.round(x.h), util = x.util / 100, gi = x.gi / 100, av = Math.min(x.av / 100, 1 - gi);
+    const h1 = 1 - Math.pow(1 - x.pd / 100, 1 / 12), h2 = Math.min(h1 * x.pdtail, 0.99);
+    const fm = x.fondeo / 100 / 12, dm = Math.pow(1 + x.desc / 100, 1 / 12) - 1, fuga = x.fuga / 100;
+    let A = 1, acc = 0;
+    const c = { ing: 0, fon: 0, pe: 0, inof: 0, loy: 0, cost: 0 };   // valor presente
+    const s = { ing: 0, fon: 0, pe: 0, inof: 0, loy: 0, cost: 0 };   // nominal, para ratios
+    let modSum = 0, saldoSum = 0; const curve = [];
+    for (let t = 1; t <= H; t++) {
+      const saldo = x.cupo * util * (1 - Math.exp(-3 * t / Math.max(x.ramp, 0.5)));
+      const hz = t <= 12 ? h1 : h2, d = Math.pow(1 + dm, -t);
+      const f = {
+        ing: A * saldo * (gi * x.rrev / 100 + av * x.rav / 100),
+        fon: A * saldo * fm,
+        pe: A * hz * saldo * x.ead * (x.lgd / 100),
+        inof: A * (x.gpv * (x.mf / 100 + (x.intl / 100) * (x.markup / 100)) + x.seg + x.memb),
+        loy: A * x.gpv * x.loy / 100,
+        cost: A * x.gpv * (x.marca + x.proc) / 100,
+      };
+      const mod = f.ing - f.fon - f.pe + f.inof - f.loy - f.cost;
+      for (const k in f) { c[k] += f[k] * d; s[k] += f[k]; }
+      modSum += mod; saldoSum += A * saldo; acc += mod * d; curve.push(acc);
+      A *= (1 - hz) * (1 - fuga);
+    }
+    const vp = c.ing - c.fon - c.pe + c.inof - c.loy - c.cost;
+    const ratio = saldoSum > 0 ? modSum / saldoSum * 12 : 0;
+    const rs = k => saldoSum > 0 ? s[k] / saldoSum * 12 : 0;
+    let payback = null;
+    if (x.cacOn) { const i = curve.findIndex(v => v >= x.cac); payback = i >= 0 ? i + 1 : -1; }
+    return { vp, ratio, c, curve, neto: vp - (x.cacOn ? x.cac : 0), saldoProm: saldoSum / H, sobrev: A, payback,
+      r: { tif: rs("ing"), ef: -rs("fon"), pe: -rs("pe"), inof: rs("inof") - rs("loy"), cost: -rs("cost"), mod: ratio } };
+  }
+  const tramo = r => r > 0.10 ? ["Buen potencial", "var(--tramo-buen)"] : r >= 0.05 ? ["Potencial medio", "var(--tramo-medio)"]
+    : r >= 0 ? ["Bajo o sin potencial", "var(--tramo-bajo)"] : ["Destructivo", "var(--tramo-destr)"];
+
+  // ---------------- formato ----------------
+  const nf0 = new Intl.NumberFormat("es-CL", { maximumFractionDigits: 0 });
+  const nf1 = new Intl.NumberFormat("es-CL", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  const money = v => (v < 0 ? "−$" : "$") + nf0.format(Math.abs(Math.round(v)));
+  const pct = v => (v < 0 ? "−" : "") + nf1.format(Math.abs(v * 100)) + "%";
+  const pp = v => (v > 0 ? "+" : v < 0 ? "−" : "") + nf1.format(Math.abs(v * 100));
+
+  // ---------------- presets de medidas ----------------
+  const PRESETS0 = {
+    memb: b => ({ ...b, memb: b.memb + 3000, fuga: +(b.fuga + 0.5).toFixed(2) }),
+    csi: b => ({ ...b, gi: Math.max(0, b.gi - 10), gpv: Math.round(b.gpv * 1.10 / 1000) * 1000 }),
+    loy: b => ({ ...b, loy: +Math.max(0, b.loy - 0.3).toFixed(2), fuga: +(b.fuga + 0.3).toFixed(2) }),
+    fon: b => ({ ...b, fondeo: +(b.fondeo + 1).toFixed(2) }),
+  };
+  const PRESETS = Object.fromEntries(Object.entries(PRESETS0).map(([k, fn]) => [k, b => ({ ...fn(b), perfil: b.perfil })]));
+
+  // ---------------- código de escenario (compartir) ----------------
+  const enc = o => btoa(unescape(encodeURIComponent(JSON.stringify(o)))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  const dec = t => JSON.parse(decodeURIComponent(escape(atob(t.replace(/-/g, "+").replace(/_/g, "/")))));
+  // Versionado: el prefijo "plv<N>." dice cómo leer el contenido. Si se agregan o renombran
+  // supuestos, sube CODE_VER y agrega en MIGRA[N] la función que lleva un código vN a vN+1
+  // (p. ej. inyectando el default de un costo nuevo). unpack aplica las migraciones en cadena,
+  // así un link antiguo sigue abriendo la misma simulación.
+  const CODE_VER = 1;
+  const MIGRA = {
+    // 1: o => ({ ...o, b: { ...o.b, nuevoCosto: 0 }, p: { ...o.p, nuevoCosto: 0 } }),
+  };
+  const pack = () => `plv${CODE_VER}.` + enc({ b: state.base, p: state.prop, m: state.modo });
+  function unpack(code) {
+    let t = String(code || "").trim().replace(/^.*#/, "");
+    const mv = t.match(/^plv(\d+)\./);
+    let v = mv ? +mv[1] : 1;            // códigos sin prefijo se leen como v1
+    if (mv) t = t.slice(mv[0].length);
+    if (v > CODE_VER) throw new Error(`código plv${v} es de una versión más nueva del simulador`);
+    let o = dec(t);
+    if (!o || !o.b || !o.p) throw new Error("código incompleto");
+    for (; v < CODE_VER; v++) {
+      if (!MIGRA[v]) throw new Error(`falta la migración plv${v} → plv${v + 1}`);
+      o = MIGRA[v](o);
+    }
+    const clean = x => Object.fromEntries(Object.entries({ ...DEF, ...x }).filter(([k]) => k in DEF || ["cacOn", "perfil"].includes(k)));
+    state.base = clean(o.b); state.prop = clean(o.p); state.modo = o.m === "contable" ? "contable" : "riesgo";
+  }
+  try { if (location.hash && location.hash.length > 8) { unpack(location.hash.slice(1)); fresh = false; } } catch (e) {}
+  if (!state.prop) state.prop = PRESETS.memb(state.base);
+
+  // ---------------- supuestos (UI) ----------------
+  const box = document.getElementById("params");
+  function renderParams() {
+    const x = state[state.edit];
+    let html = "", g = "";
+    P.forEach(p => {
+      if (p.g !== g) { if (g) html += "</fieldset>"; html += `<fieldset><legend>${p.g}</legend>`; g = p.g; }
+      const [sl, sc] = SRC[p.src];
+      const changed = state.edit === "prop" && x[p.k] !== state.base[p.k];
+      html += `<div class="param${changed ? " changed" : ""}">
+        <div class="lab"><label for="n-${p.k}">${p.l}</label> <span class="src ${sc}">${sl}</span>
+          <button class="qbtn" type="button" aria-expanded="false" aria-controls="w-${p.k}" title="${p.why.replace(/"/g, "&quot;")}" aria-label="Fuente de ${p.l}">?</button></div>
+        <input type="number" id="n-${p.k}" data-k="${p.k}" min="${p.min}" max="${p.max}" step="${p.step}" value="${x[p.k]}" aria-label="${p.l} (${p.u})">
+        <input type="range" id="r-${p.k}" data-k="${p.k}" min="${p.min}" max="${p.max}" step="${p.step}" value="${x[p.k]}" aria-label="${p.l}">
+        <div class="hint why" id="w-${p.k}">${p.why}</div>${p.hint ? `<div class="hint" id="hint-ngi"></div>` : ""}
+      </div>`;
+      if (p.k === "cac") html += `<label class="toggle" for="cacOn"><input type="checkbox" id="cacOn" ${x.cacOn ? "checked" : ""}> Restar CAC y mostrar payback</label>`;
+    });
+    box.innerHTML = html + "</fieldset>";
+    document.getElementById("perfil-actual").textContent = `Editando ${state.edit === "base" ? "Base" : "Propuesta"} · perfil ${x.perfil || "personalizado"}. Si cambias un supuesto, el perfil queda como punto de partida.`;
+    updateHint();
+  }
+  function updateHint() {
+    const x = state[state.edit], el = document.getElementById("hint-ngi");
+    if (!el) return;
+    const ngi = Math.max(0, 100 - x.gi - x.av);
+    el.textContent = x.gi + x.av > 100 ? "Cuotas con interés + avances supera 100%: se recortan los avances." : `Cuotas sin interés: ${nf0.format(ngi)}% del saldo (no generan interés).`;
+  }
+  box.addEventListener("click", e => {
+    const q = e.target.closest(".qbtn"); if (!q) return;
+    const w = document.getElementById(q.getAttribute("aria-controls")); const open = q.getAttribute("aria-expanded") !== "true";
+    q.setAttribute("aria-expanded", open ? "true" : "false"); w.classList.toggle("open", open);
+  });
+  box.addEventListener("input", e => {
+    const k = e.target.dataset.k;
+    if (e.target.id === "cacOn") { state[state.edit].cacOn = e.target.checked; save(); render(); return; }
+    if (!k) return;
+    const p = P.find(q => q.k === k); let v = parseFloat(e.target.value);
+    if (!isFinite(v)) return;
+    v = Math.min(p.max, Math.max(p.min, v));
+    state[state.edit][k] = v;
+    const twin = document.getElementById((e.target.type === "range" ? "n-" : "r-") + k); if (twin) twin.value = v;
+    const row = e.target.closest(".param");
+    if (row) row.classList.toggle("changed", state.edit === "prop" && v !== state.base[k]);
+    updateHint(); save(); render();
+  });
+  box.addEventListener("change", e => { if (e.target.id === "cacOn") { state[state.edit].cacOn = e.target.checked; save(); render(); } });
+
+  const setTabs = () => document.querySelectorAll(".tabs button").forEach(x => x.setAttribute("aria-selected", x.dataset.s === state.edit ? "true" : "false"));
+  document.querySelectorAll(".tabs button").forEach(b => b.addEventListener("click", () => { state.edit = b.dataset.s; save(); setTabs(); renderParams(); }));
+  document.getElementById("copy").addEventListener("click", () => { state.prop = { ...state.base }; save(); renderParams(); render(); });
+  document.getElementById("reset").addEventListener("click", () => {
+    state.modo = "riesgo"; state.base = { ...DEF, ...perfil("Cartera", "riesgo"), cacOn: false }; state.prop = PRESETS.memb(state.base);
+    save(); renderModo(); renderParams(); render();
+  });
+
+  // supuesto de pérdida
+  function renderModo() {
+    document.getElementById("m-riesgo").setAttribute("aria-pressed", state.modo === "riesgo" ? "true" : "false");
+    document.getElementById("m-contable").setAttribute("aria-pressed", state.modo === "contable" ? "true" : "false");
+    document.getElementById("m-help").textContent = state.modo === "riesgo"
+      ? "LGD y EAD del PLV de Credicorp (entregados por Riesgo), iguales para todos los perfiles."
+      : "LGD y EAD medidos con castigos y recuperos contables de cada segmento. Tiende a sobrestimar la pérdida.";
+  }
+  function setModo(m) {
+    state.modo = m;
+    ["base", "prop"].forEach(sc => {
+      const x = state[sc], seg = SEGS[x.perfil] || SEGS.Cartera;
+      Object.assign(x, m === "riesgo" ? RIESGO : { lgd: seg.lgdC, ead: seg.eadC });
+    });
+    save(); renderModo(); renderParams(); render();
+  }
+  document.getElementById("m-riesgo").addEventListener("click", () => setModo("riesgo"));
+  document.getElementById("m-contable").addEventListener("click", () => setModo("contable"));
+
+  document.getElementById("perfiles").addEventListener("click", e => {
+    const k = e.target.dataset && e.target.dataset.perfil; if (!k) return;
+    state[state.edit] = { ...state[state.edit], ...perfil(k, state.modo) };
+    if (state.edit === "base" && fresh) state.prop = PRESETS.memb(state.base);
+    save(); renderParams(); render();
+  });
+  document.getElementById("presets").addEventListener("click", e => {
+    const k = e.target.dataset && e.target.dataset.preset; if (!k) return;
+    state.prop = PRESETS[k](state.base); state.edit = "prop"; save(); setTabs(); renderParams(); render();
+  });
+
+  // compartir y exportar
+  const msg = t => { const el = document.getElementById("share-msg"); el.textContent = t; };
+  async function copyText(t, okMsg) {
+    try { await navigator.clipboard.writeText(t); msg(okMsg); }
+    catch (e) { const i = document.getElementById("share-in"); i.value = t; i.focus(); i.select(); msg("No se pudo copiar automáticamente: el texto quedó seleccionado en la casilla, cópialo con Ctrl+C."); }
+  }
+  document.getElementById("share-copy").addEventListener("click", () => copyText(pack(), "Código copiado. Pégalo en Cargar, o al final del link después de #."));
+  document.getElementById("share-load").addEventListener("click", () => {
+    try { unpack(document.getElementById("share-in").value); fresh = false; save(); renderModo(); renderParams(); render(); msg("Escenario cargado."); }
+    catch (e) { msg(/versión más nueva/.test(e.message) ? "Este código viene de una versión más nueva del simulador; abre el link con esa versión." : `El código no se pudo leer. Revisa que esté completo, desde plv${CODE_VER}.`); }
+  });
+  document.getElementById("export").addEventListener("click", () => {
+    const rb = plv(state.base), rp = plv(state.prop), fmt = v => String(Math.round(v * 10000) / 10000).replace(".", ",");
+    const L = [["Supuesto", "Base", "Propuesta"].join("\t")];
+    P.forEach(p => L.push([`${p.l} (${p.u})`, fmt(state.base[p.k]), fmt(state.prop[p.k])].join("\t")));
+    L.push(["Supuesto de pérdida", state.modo, state.modo].join("\t"), "");
+    L.push(["Resultado", "Base", "Propuesta"].join("\t"));
+    [["MOD / saldo hábil", rb.ratio, rp.ratio], ["MOD por tarjeta (VP)", rb.vp, rp.vp], ["Ingreso financiero (VP)", rb.c.ing, rp.c.ing], ["Costo de fondeo (VP)", -rb.c.fon, -rp.c.fon],
+     ["Pérdida esperada (VP)", -rb.c.pe, -rp.c.pe], ["Ingresos no financieros (VP)", rb.c.inof, rp.c.inof], ["Costo de loyalty (VP)", -rb.c.loy, -rp.c.loy],
+     ["Marca + procesadora (VP)", -rb.c.cost, -rp.c.cost]].forEach(r => L.push([r[0], fmt(r[1]), fmt(r[2])].join("\t")));
+    copyText(L.join("\n"), "Resultados copiados. Pégalos en Excel o Google Sheets.");
+  });
+
+  // ---------------- resultados ----------------
+  function kpi(el, name, sc, r, ref) {
+    const [tl, tc] = tramo(r.ratio), x = state[sc];
+    let delta = "";
+    if (ref) {
+      const dv = r.vp - ref.vp, dr = (r.ratio - ref.ratio) * 100;
+      delta = `<div class="delta ${dv >= 0 ? "up" : "down"}">${dv >= 0 ? "▲" : "▼"} ${money(dv)} por tarjeta · ${dr >= 0 ? "+" : "−"}${nf1.format(Math.abs(dr))} pp en MOD/saldo vs Base</div>`;
+    }
+    const pb = !x.cacOn ? "CAC apagado" : r.payback > 0 ? `mes ${r.payback}` : `no ocurre en ${Math.round(x.h)} meses`;
+    el.innerHTML = `<h2>${name}${x.perfil ? " · " + x.perfil : ""}</h2>
+      <div class="ratio">${pct(r.ratio)}</div>
+      <div style="color:var(--muted);font-size:12.5px">MOD anual / saldo hábil</div>
+      <span class="pill" style="--c:${tc}">${tl}</span>
+      <dl class="mini">
+        <dt>MOD lifetime por tarjeta (VP)</dt><dd>${money(r.vp)}</dd>
+        <dt>Valor neto de CAC</dt><dd>${x.cacOn ? money(r.neto) : "CAC apagado"}</dd>
+        <dt>Payback del CAC</dt><dd>${pb}</dd>
+        <dt>Tarjetas vivas al final del horizonte</dt><dd>${pct(r.sobrev)}</dd>
+      </dl>${delta}`;
+  }
+
+  let CH = null;
+  function chart(rb, rp) {
+    const W = 760, H = 260, m = { l: 64, r: 16, t: 14, b: 32 };
+    const n = Math.max(rb.curve.length, rp.curve.length);
+    const cacB = state.base.cacOn ? state.base.cac : null, cacP = state.prop.cacOn ? state.prop.cac : null;
+    const vals = [...rb.curve, ...rp.curve, 0, ...(cacB ? [cacB] : []), ...(cacP ? [cacP] : [])];
+    let lo = Math.min(...vals), hi = Math.max(...vals);
+    const span = hi - lo || 1, stepRaw = span / 4, mag = Math.pow(10, Math.floor(Math.log10(stepRaw)));
+    const step = [1, 2, 2.5, 5, 10].map(f => f * mag).find(s => s >= stepRaw) || stepRaw;
+    lo = Math.floor(lo / step) * step; hi = Math.ceil(hi / step) * step;
+    const x = i => m.l + (i / (n - 1 || 1)) * (W - m.l - m.r), y = v => m.t + (1 - (v - lo) / (hi - lo)) * (H - m.t - m.b);
+    let g = "";
+    for (let v = lo; v <= hi + 1e-6; v += step) g += `<line x1="${m.l}" x2="${W - m.r}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)" stroke-width="${Math.abs(v) < 1e-6 ? 1.4 : 0.6}"/><text x="${m.l - 8}" y="${y(v) + 4}" text-anchor="end">${money(v)}</text>`;
+    const xt = n > 60 ? 24 : 12;
+    for (let i = 0; i < n; i += xt) g += `<text x="${x(i)}" y="${H - 10}" text-anchor="middle">${i === 0 ? "mes 1" : "mes " + (i + 1)}</text>`;
+    g += `<text x="${x(n - 1)}" y="${H - 10}" text-anchor="end">mes ${n}</text>`;
+    const path = c => c.map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join("");
+    const area = c => path(c) + `L${x(c.length - 1).toFixed(1)},${y(Math.max(lo, 0)).toFixed(1)}L${x(0).toFixed(1)},${y(Math.max(lo, 0)).toFixed(1)}Z`;
+    if (cacB) g += `<line x1="${m.l}" x2="${W - m.r}" y1="${y(cacB)}" y2="${y(cacB)}" stroke="var(--base)" stroke-dasharray="4 4"/>`;
+    if (cacP && cacP !== cacB) g += `<line x1="${m.l}" x2="${W - m.r}" y1="${y(cacP)}" y2="${y(cacP)}" stroke="var(--prop)" stroke-dasharray="4 4"/>`;
+    g += `<path d="${area(rp.curve)}" fill="var(--prop)" fill-opacity=".10"/>`;
+    g += `<path d="${path(rb.curve)}" fill="none" stroke="var(--base)" stroke-width="2.2"/>`;
+    g += `<path d="${path(rp.curve)}" fill="none" stroke="var(--prop)" stroke-width="2.6"/>`;
+    const lb = rb.curve.length - 1, lp = rp.curve.length - 1;
+    g += `<circle cx="${x(lb)}" cy="${y(rb.curve[lb])}" r="4" fill="var(--base)"/><circle cx="${x(lp)}" cy="${y(rp.curve[lp])}" r="4.5" fill="var(--prop)"/>`;
+    [[rb, "var(--base)", cacB], [rp, "var(--prop)", cacP]].forEach(([r, col, cac], j) => {
+      if (cac && r.payback > 0) {
+        const i = r.payback - 1;
+        g += `<circle cx="${x(i)}" cy="${y(r.curve[i])}" r="6" fill="var(--panel)" stroke="${col}" stroke-width="2.5"/>`;
+        g += `<text x="${x(i)}" y="${y(r.curve[i]) - 11 - j * 13}" text-anchor="middle" style="fill:${col};font-weight:700">payback mes ${r.payback}</text>`;
+      }
+    });
+    g += `<line id="hv" x1="0" x2="0" y1="${m.t}" y2="${H - m.b}" stroke="var(--fg)" stroke-opacity=".35" visibility="hidden"/>`;
+    g += `<rect id="hov" x="${m.l}" y="${m.t}" width="${W - m.l - m.r}" height="${H - m.t - m.b}" fill="transparent"/>`;
+    const wrap = document.getElementById("chart");
+    wrap.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="MOD acumulado en valor presente, Base vs Propuesta">${g}</svg><div class="tip" id="tip" hidden></div>`;
+    CH = { x, n, m, W, rb, rp };
+  }
+  const chartEl = document.getElementById("chart");
+  function hover(ev) {
+    if (!CH) return;
+    const svg = chartEl.querySelector("svg"), tip = document.getElementById("tip"), hv = document.getElementById("hv");
+    const rect = svg.getBoundingClientRect(), sx = (ev.clientX - rect.left) / rect.width * CH.W;
+    if (sx < CH.m.l || sx > CH.W - CH.m.r) { tip.hidden = true; hv.setAttribute("visibility", "hidden"); return; }
+    const i = Math.max(0, Math.min(CH.n - 1, Math.round((sx - CH.m.l) / (CH.W - CH.m.l - CH.m.r) * (CH.n - 1))));
+    hv.setAttribute("x1", CH.x(i)); hv.setAttribute("x2", CH.x(i)); hv.setAttribute("visibility", "visible");
+    tip.innerHTML = `<b>Mes ${i + 1}</b><span>Base <strong>${money(CH.rb.curve[i] ?? NaN)}</strong></span><span>Propuesta <strong>${money(CH.rp.curve[i] ?? NaN)}</strong></span>`;
+    tip.hidden = false;
+    // Posición: a la derecha del cursor si cabe, si no a la izquierda; luego se acota a los
+    // bordes del gráfico y de la ventana visible, para que en móvil no se corte ni genere scroll.
+    const wr = chartEl.getBoundingClientRect(), tw = tip.offsetWidth, gap = 12, pad = 4;
+    const px = rect.left - wr.left + CH.x(i) / CH.W * rect.width;
+    const vw = document.documentElement.clientWidth;
+    const minL = Math.max(0, pad - wr.left);
+    const maxL = Math.min(wr.width, vw - wr.left - pad) - tw;
+    let left = px + gap <= maxL ? px + gap : px - gap - tw;
+    left = Math.max(minL, Math.min(left, maxL));
+    tip.style.left = left + "px"; tip.style.top = "18px";
+  }
+  chartEl.addEventListener("pointermove", hover);
+  chartEl.addEventListener("pointerleave", () => { const t = document.getElementById("tip"), hv = document.getElementById("hv"); if (t) t.hidden = true; if (hv) hv.setAttribute("visibility", "hidden"); });
+
+  function tornado() {
+    const sc = state.tor, x0 = state[sc], base = plv(x0).ratio;
+    const skip = ["h", "desc", "cac", "av", "rav", "intl", "markup", "seg"];
+    const rows = P.filter(p => !skip.includes(p.k) && x0[p.k] !== 0).map(p => {
+      const up = plv({ ...x0, [p.k]: Math.min(p.max, x0[p.k] * 1.1) }).ratio - base;
+      const dn = plv({ ...x0, [p.k]: Math.max(p.min, x0[p.k] * 0.9) }).ratio - base;
+      return { p, up, dn, mag: Math.max(Math.abs(up), Math.abs(dn)) };
+    }).sort((a, b) => b.mag - a.mag).slice(0, 10);
+    const mx = Math.max(...rows.map(r => r.mag), 1e-6);
+    const seg = (v, cls) => { const w = Math.abs(v) / mx * 48; return `<span class="${cls}" style="width:${w}%;left:${v >= 0 ? 50 : 50 - w}%"></span>`; };
+    document.getElementById("tornado").innerHTML = rows.map(r => `<div class="tl">${r.p.l}<small>${nf1.format(x0[r.p.k] * 0.9)} a ${nf1.format(x0[r.p.k] * 1.1)} ${r.p.u}</small></div>
+      <div class="tbar" title="Sube 10%: ${pp(r.up)} pp · Baja 10%: ${pp(r.dn)} pp"><span class="z"></span>${seg(r.dn, "lo")}${seg(r.up, "hi")}
+        <em style="left:${r.up >= 0 ? 51 + Math.abs(r.up) / mx * 48 : 49 - Math.abs(r.up) / mx * 48 - 8}%">${pp(r.up)}</em></div>`).join("");
+    document.getElementById("t-base").setAttribute("aria-pressed", sc === "base" ? "true" : "false");
+    document.getElementById("t-prop").setAttribute("aria-pressed", sc === "prop" ? "true" : "false");
+  }
+  document.getElementById("t-base").addEventListener("click", () => { state.tor = "base"; save(); tornado(); });
+  document.getElementById("t-prop").addEventListener("click", () => { state.tor = "prop"; save(); tornado(); });
+
+  function waterfall(rb, rp) {
+    const rows = [["Ingreso financiero", rb.c.ing, rp.c.ing], ["Costo de fondeo", -rb.c.fon, -rp.c.fon], ["Pérdida esperada", -rb.c.pe, -rp.c.pe],
+      ["Ingresos no financieros", rb.c.inof, rp.c.inof], ["Costo de loyalty", -rb.c.loy, -rp.c.loy], ["Marca + procesadora", -rb.c.cost, -rp.c.cost]];
+    const mx = Math.max(...rows.flatMap(r => [Math.abs(r[1]), Math.abs(r[2])]), 1);
+    const bar = (v, cls) => { const w = Math.abs(v) / mx * 50; return `<span class="${cls}" style="width:${w}%;left:${v >= 0 ? 50 : 50 - w}%"></span>`; };
+    const dif = d => Math.abs(d) < 0.5 ? "—" : (d > 0 ? "+" : "") + money(d);
+    let h = `<thead><tr><th>Componente</th><th>Base</th><th>Propuesta</th><th>Diferencia</th><th class="barcell" aria-hidden="true"></th></tr></thead><tbody>`;
+    rows.forEach(([l, b, p]) => {
+      h += `<tr><td>${l}</td><td class="${b < 0 ? "neg" : ""}">${money(b)}</td><td class="${p < 0 ? "neg" : ""}">${money(p)}</td><td class="${p - b < 0 ? "neg" : ""}">${dif(p - b)}</td>
+        <td class="barcell" aria-hidden="true"><div class="bar"><span class="z"></span>${bar(b, "b")}${bar(p, "p")}</div></td></tr>`;
+    });
+    h += `<tr class="total"><td>MOD lifetime (VP)</td><td>${money(rb.vp)}</td><td>${money(rp.vp)}</td><td class="${rp.vp - rb.vp < 0 ? "neg" : ""}">${dif(rp.vp - rb.vp)}</td><td></td></tr></tbody>`;
+    document.getElementById("wf").innerHTML = h;
+  }
+
+  const comunes = ["pdtail", "marca", "proc", "cac", "h", "fondeo", "desc", "ramp", "intl", "markup", "seg", "memb"];
+  const segX = k => ({ ...DEF, ...Object.fromEntries(comunes.map(c => [c, state.base[c]])), ...perfil(k, state.modo), cacOn: false });
+  function renderSegs() {
+    let h = `<thead><tr><th>Perfil</th><th>Tarjetas vivas</th><th>Saldo por tarjeta</th><th>PD anual</th><th>Fuga mensual</th><th>MOD / saldo</th><th>Tramo</th><th>MOD por tarjeta (VP)</th></tr></thead><tbody>`;
+    ["XS", "Small", "Medium", "Large", "Cartera"].forEach(k => {
+      const x = segX(k), r = plv(x), [tl, tc] = tramo(r.ratio);
+      h += `<tr${k === "Cartera" ? ' class="total"' : ""}><td>${k}</td><td>${nf0.format(SEGS[k].n)}</td><td>${money(x.cupo * x.util / 100)}</td><td>${nf1.format(x.pd)}%</td><td>${nf1.format(x.fuga)}%</td>
+        <td class="${r.ratio < 0 ? "neg" : ""}">${pct(r.ratio)}</td><td><span class="pill" style="--c:${tc};margin:0">${tl}</span></td><td class="${r.vp < 0 ? "neg" : ""}">${money(r.vp)}</td></tr>`;
+    });
+    document.getElementById("segtab").innerHTML = h + "</tbody>";
+  }
+
+  function renderCmp() {
+    const r = plv(segX("Cartera")).r;
+    const rows = [["Ingreso financiero", CC.tif, r.tif], ["Costo de fondeo", CC.ef, r.ef], ["Pérdida esperada", CC.pe, r.pe],
+      ["Ingresos no financieros netos de loyalty", CC.inof, r.inof], ["Marca + procesadora", CC.cost, r.cost], ["MOD / saldo hábil", CC.mod, r.mod]];
+    let h = `<thead><tr><th>% del saldo hábil, anual</th><th>PLV Credicorp</th><th>Simulador · Cartera</th><th>Diferencia</th></tr></thead><tbody>`;
+    rows.forEach(([l, a, b], i) => {
+      const big = i < 5 && Math.abs(b - a) >= 0.02;
+      h += `<tr${i === 5 ? ' class="total"' : ""}><td>${l}</td><td class="${a < 0 ? "neg" : ""}">${pct(a)}</td><td class="${b < 0 ? "neg" : ""}${big ? " hl" : ""}">${pct(b)}</td><td class="${b - a < 0 ? "neg" : ""}${big ? " hl" : ""}">${pp(b - a)} pp</td></tr>`;
+    });
+    document.getElementById("cmp").innerHTML = h + "</tbody>";
+    document.getElementById("cmp-note").textContent = `En el PLV de Credicorp, ${nf0.format(CC.destr * 100)}% de las tarjetas está en cajas destructivas (MOD < 0). BLACK deja ${pct(CC.black)} y STANDARD ${pct(CC.standard)}; la caja más riesgosa de STANDARD (PD5) llega a ${pct(CC.stdpd5)}. La mayor diferencia con el simulador está en la pérdida esperada: cambia el supuesto de pérdida arriba para verla.`;
+  }
+
+  function render() {
+    renderSegs(); renderCmp();
+    const rb = plv(state.base), rp = plv(state.prop);
+    kpi(document.getElementById("k-base"), "Base", "base", rb, null);
+    kpi(document.getElementById("k-prop"), "Propuesta", "prop", rp, rb);
+    chart(rb, rp); tornado(); waterfall(rb, rp);
+  }
+
+  setTabs(); renderModo(); renderParams(); render();
+})();
+</script>
+</body>
+</html>
