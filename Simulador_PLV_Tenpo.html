@@ -604,19 +604,30 @@ details.dtab thead th { position: sticky; top: 0; background: var(--panel); }
     catch (e) { msg(/versión más nueva/.test(e.message) ? "Este código viene de una versión más nueva del simulador; abre el link con esa versión." : `El código no se pudo leer. Revisa que esté completo, desde plv${CODE_VER}.`); }
   });
   // filas de la exportación; conMeses agrega la curva mes a mes (solo en el CSV, que no tiene límite práctico de largo)
+  // Columnas: Concepto | Unidad | Base | Propuesta | Diferencia. Porcentajes en puntos (43 = 43%), pesos sin decimales.
   function filasExport(conMeses) {
-    const rb = plv(state.base), rp = plv(state.prop), fmt = v => String(Math.round(v * 10000) / 10000).replace(".", ",");
-    const F = [["Supuesto", "Base", "Propuesta"]];
-    P.forEach(p => F.push([`${p.l} (${p.u})`, fmt(state.base[p.k]), fmt(state.prop[p.k])]));
-    F.push(["Supuesto de pérdida", state.modo, state.modo]);
-    F.push(["Mezcla de la cosecha", mixTxt(state.base) || "apagada", mixTxt(state.prop) || "apagada"], []);
-    F.push(["Resultado", "Base", "Propuesta"]);
-    [["MOD / saldo hábil", rb.ratio, rp.ratio], ["MOD por tarjeta (VP)", rb.vp, rp.vp], ["Ingreso financiero (VP)", rb.c.ing, rp.c.ing], ["Costo de fondeo (VP)", -rb.c.fon, -rp.c.fon],
-     ["Pérdida esperada (VP)", -rb.c.pe, -rp.c.pe], ["Ingresos no financieros (VP)", rb.c.inof, rp.c.inof], ["Costo de loyalty (VP)", -rb.c.loy, -rp.c.loy],
-     ["Marca + procesadora (VP)", -rb.c.cost, -rp.c.cost], ["Impuesto de timbres, ITE (VP)", -rb.c.ite, -rp.c.ite]].forEach(r => F.push([r[0], fmt(r[1]), fmt(r[2])]));
+    const B = state.base, Q = state.prop, rb = plv(B), rp = plv(Q);
+    const fmt = (v, d = 4) => v == null || !isFinite(v) ? "" : String(Math.round(v * 10 ** d) / 10 ** d).replace(".", ",");
+    const UN = { "%": "%", "$": "$", "m": "meses", "×": "veces", "pb": "pb" };
+    const num = (l, u, b, p, d) => [l, u, fmt(b, d), fmt(p, d), fmt(b == null || p == null ? null : p - b, d)];
+    const txt = (l, b, p) => [l, "", b, p, ""];
+    const F = [[`Simulador PLV · Tarjeta de crédito · ${new Date().toLocaleString("es-CL")}`], [],
+      ["Supuesto", "Unidad", "Base", "Propuesta", "Diferencia"]];
+    F.push(txt("Perfil", B.perfil || "personalizado", Q.perfil || "personalizado"), txt("Supuesto de pérdida", state.modo, state.modo),
+      txt("Mezcla de la cosecha", mixTxt(B) || "apagada", mixTxt(Q) || "apagada"), txt("Restar CAC", B.cacOn ? "sí" : "no", Q.cacOn ? "sí" : "no"));
+    P.forEach(p => F.push(num(p.l, UN[p.u] || p.u, B[p.k], Q[p.k])));
+    const pb = (x, r) => !x.cacOn ? "CAC apagado" : r.payback > 0 ? `mes ${r.payback}` : "no ocurre";
+    F.push([], ["Resultado", "Unidad", "Base", "Propuesta", "Diferencia"],
+      num("MOD anual / saldo hábil", "%", rb.ratio * 100, rp.ratio * 100, 2), txt("Tramo", tramo(rb.ratio)[0], tramo(rp.ratio)[0]),
+      num("MOD lifetime por tarjeta (VP)", "$", rb.vp, rp.vp, 0),
+      B.cacOn || Q.cacOn ? num("Valor neto de CAC (VP)", "$", B.cacOn ? rb.neto : null, Q.cacOn ? rp.neto : null, 0) : txt("Valor neto de CAC (VP)", "CAC apagado", "CAC apagado"),
+      txt("Payback del CAC", pb(B, rb), pb(Q, rp)), num("Tarjetas vivas al final del horizonte", "%", rb.sobrev * 100, rp.sobrev * 100, 1));
+    [["Ingreso financiero (VP)", rb.c.ing, rp.c.ing], ["Costo de fondeo (VP)", -rb.c.fon, -rp.c.fon], ["Pérdida esperada (VP)", -rb.c.pe, -rp.c.pe],
+     ["Ingresos no financieros (VP)", rb.c.inof, rp.c.inof], ["Costo de loyalty (VP)", -rb.c.loy, -rp.c.loy], ["Marca + procesadora (VP)", -rb.c.cost, -rp.c.cost],
+     ["Impuesto de timbres, ITE (VP)", -rb.c.ite, -rp.c.ite]].forEach(r => F.push(num(r[0], "$", r[1], r[2], 0)));
     if (conMeses) {
-      F.push([], ["Mes", "MOD acumulado VP Base", "MOD acumulado VP Propuesta"]);
-      for (let i = 0; i < Math.max(rb.curve.length, rp.curve.length); i++) F.push([String(i + 1), rb.curve[i] == null ? "" : fmt(rb.curve[i]), rp.curve[i] == null ? "" : fmt(rp.curve[i])]);
+      F.push([], ["Mes", "Unidad", "MOD acumulado VP Base", "MOD acumulado VP Propuesta", "Diferencia"]);
+      for (let i = 0; i < Math.max(rb.curve.length, rp.curve.length); i++) F.push(num(String(i + 1), "$", rb.curve[i], rp.curve[i], 0));
     }
     F.push([], ["Código del escenario", pack()]);
     return F;
