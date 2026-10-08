@@ -293,7 +293,7 @@ details.dtab thead th { position: sticky; top: 0; background: var(--panel); }
           <li><b>Saldo hábil</b> = cupo × utilización, que se construye en los primeros meses (rampa). Incluye cuotas con y sin interés y avances.</li>
           <li><b>MOD / saldo hábil</b> = MOD total ÷ saldo hábil total × 12, sin descontar, a 60 meses: el mismo cálculo del PLV de Credicorp.</li>
           <li><b>Calibración Tenpo</b> (oct-25 a sep-26): MAE.Cuentas (cupo, estados, mora), colocación oficial, revenue app TC, economics (GPV TC), misiones de loyalty y costo de riesgo. Perfiles por segmento de <code>fct_tipo_users_tc</code>. XS casi no tiene pérdidas y cancela mucho: probablemente es la tarjeta con garantía (no verificado) y no está en el PLV de Credicorp, que cubre BLACK y STANDARD.</li>
-          <li><b>Diferencias con Credicorp que siguen abiertas</b>: su curva de PD parte en cero los dos primeros meses y crece con la antigüedad (la tomaron de otras entidades); aquí la PD es plana y medida sobre la cartera completa. Su cancelación es 0,3% mensual (dato de Producto) y la medida en Small, Medium y Large es ~0,2%.</li>
+          <li><b>Diferencias con Credicorp que siguen abiertas</b>: su cancelación es 0,3% mensual (dato de Producto) y la medida en Small, Medium y Large es ~0,2%.</li>
         </ul>
       </details>
     </section>
@@ -320,7 +320,7 @@ details.dtab thead th { position: sticky; top: 0; background: var(--panel); }
     { g: "Escenario macro", k: "pass", l: "Traspaso del shock a la tasa de cuotas", u: "%", min: 0, max: 100, step: 5, v: 0, src: "il", why: "Parte del shock que se traslada a la tasa de cuotas con interés y avances. La tasa máxima convencional también se mueve con el mercado, pero el traspaso real depende de la competencia y la política comercial." },
     { g: "Escenario macro", k: "ipc", l: "Inflación anual", u: "%", min: 0, max: 15, step: 0.1, v: 0, src: "il", why: "Reajusta mes a mes el GPV, la membresía y los seguros (el cupo no se reajusta solo). Con 0 los flujos quedan planos en pesos, aunque la tasa de descuento es nominal. Meta del Banco Central: 3%. Marca, procesadora, loyalty e ITE son % del GPV, así que suben con él." },
     { g: "Riesgo", k: "pd", l: "PD del primer año", u: "%", min: 0, max: 40, step: 0.1, v: 10.8, src: "tp", why: "Cuentas sanas a sep-25 que llegan a 90+ días o castigo en 12 meses (9 meses observables), anualizado." },
-    { g: "Riesgo", k: "pdtail", l: "PD después del año 1 (× año 1)", u: "×", min: 0, max: 2, step: 0.05, v: 1, src: "il", why: "La PD medida es de la cartera completa, por eso se deja plana. La curva de Credicorp crece con la antigüedad." },
+    { g: "Riesgo", k: "pdtail", l: "PD después del año 1 (× año 1)", u: "×", min: 0, max: 2, step: 0.05, v: 1, src: "", why: "Multiplica la PD a partir del año 2. 1 = misma PD que el año 1." },
     { g: "Riesgo", k: "lgd", l: "LGD", u: "%", min: 0, max: 100, step: 1, v: 58, src: "cc", why: "Depende del supuesto de pérdida elegido arriba: Riesgo (58%, PLV de Credicorp) o Contable (1 − recuperos / castigos)." },
     { g: "Riesgo", k: "ead", l: "Deuda al default (× saldo promedio)", u: "×", min: 0.5, max: 3, step: 0.01, v: 1.35, src: "cc", why: "Depende del supuesto de pérdida: Riesgo (1,35×, PLV de Credicorp) o Contable (castigo medio / saldo medio del perfil)." },
     { g: "Ingresos no financieros", k: "mf", l: "Ingresos por servicios (% GPV)", u: "%", min: 0, max: 4, step: 0.01, v: 1.51, src: "tp", why: "Revenue TC servicios / GPV TC. Incluye merchant fee, seguros, markup y comisiones. En Credicorp: intercambio 1% + markup 0,13% del GPV + seguros." },
@@ -333,7 +333,7 @@ details.dtab thead th { position: sticky; top: 0; background: var(--panel); }
     { g: "Costos", k: "proc", l: "Costo de procesadora (% GPV)", u: "%", min: 0, max: 2, step: 0.01, v: 0.19, src: "cc", why: "PLV de Credicorp: 0,19% de las compras." },
     { g: "Costos", k: "iteSh", l: "Compras en cuotas con ITE a cargo de Tenpo (% GPV)", u: "%", min: 0, max: 100, step: 1, v: 0, src: "il", why: "Impuesto de timbres y estampillas: 0,066% por mes de plazo, con tope de 0,8%. Cuenta solo si Tenpo lo asume (p. ej. en campañas de cuotas sin interés); si lo paga el cliente no es costo de Tenpo. Validar con Tributario y revisar si ya está dentro de algún revenue neto." },
     { g: "Costos", k: "itePl", l: "Plazo medio de esas cuotas", u: "m", min: 1, max: 36, step: 1, v: 6, src: "il", why: "Define la tasa del ITE: 0,066% × meses, tope 0,8% (12 meses o más)." },
-    { g: "Costos", k: "cac", l: "CAC por tarjeta", u: "$", min: 0, max: 150000, step: 1000, v: 25000, src: "il", why: "Sin dato específico de TC. El PLV de Credicorp no incluye CAC." },
+    { g: "Costos", k: "cac", l: "CAC por tarjeta", u: "$", min: 0, max: 150000, step: 1000, v: 25000, src: "", why: "Costo de adquirir una tarjeta. El PLV de Credicorp no incluye CAC." },
     { g: "Fuga y horizonte", k: "fuga", l: "Fuga mensual (cancelación)", u: "%", min: 0, max: 10, step: 0.05, v: 1.6, src: "tp", why: "Cuentas Normal que pasan a canceladas por el cliente al mes siguiente (mediana de 12 meses). XS concentra casi toda la cancelación. Credicorp usa 0,3%." },
     { g: "Fuga y horizonte", k: "fugaIni", l: "Fuga de los primeros meses (× fuga estable)", u: "×", min: 1, max: 6, step: 0.1, v: 1, src: "il", why: "Las tarjetas nuevas suelen cancelar más los primeros meses. En el mes 1 la fuga es este múltiplo de la de arriba y baja en línea recta hasta igualarla. 1 = fuga plana. Ojo: la fuga medida es de la cartera completa; calibrar con cancelación por antigüedad (MAE) antes de usarlo como base." },
     { g: "Fuga y horizonte", k: "fugaMeses", l: "Meses de fuga temprana", u: "m", min: 1, max: 24, step: 1, v: 6, src: "il", why: "Meses que tarda la fuga temprana en llegar a la fuga estable." },
@@ -491,10 +491,10 @@ details.dtab thead th { position: sticky; top: 0; background: var(--panel); }
       <p class="mixnote" id="mix-note"></p></fieldset>`, g = "";
     P.forEach(p => {
       if (p.g !== g) { if (g) html += "</fieldset>"; html += `<fieldset><legend>${p.g}</legend>`; g = p.g; }
-      const [sl, sc] = SRC[p.src];
+      const [sl, sc] = SRC[p.src] || ["", ""];
       const changed = state.edit === "prop" && x[p.k] !== state.base[p.k];
       html += `<div class="param${changed ? " changed" : ""}">
-        <div class="lab"><label for="n-${p.k}">${p.l}</label> <span class="src ${sc}">${sl}</span>
+        <div class="lab"><label for="n-${p.k}">${p.l}</label> ${sl ? `<span class="src ${sc}">${sl}</span>` : ""}
           <button class="qbtn" type="button" aria-expanded="false" aria-controls="w-${p.k}" title="${p.why.replace(/"/g, "&quot;")}" aria-label="Fuente de ${p.l}">?</button></div>
         <input type="number" id="n-${p.k}" data-k="${p.k}" min="${p.min}" max="${p.max}" step="${p.step}" value="${x[p.k]}" aria-label="${p.l} (${p.u})">
         <input type="range" id="r-${p.k}" data-k="${p.k}" min="${p.min}" max="${p.max}" step="${p.step}" value="${x[p.k]}" aria-label="${p.l}">
