@@ -136,6 +136,17 @@ details.how code { font-size: 12.5px; background: var(--panel-2); padding: 1px 5
 .tip { position: absolute; pointer-events: none; max-width: calc(100vw - 8px); box-sizing: border-box; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; font-size: 12px; font-variant-numeric: tabular-nums; box-shadow: 0 2px 8px rgba(0,0,0,.15); white-space: nowrap; }
 .tip b { display: block; margin-bottom: 2px; }
 .tip span { display: flex; gap: 8px; justify-content: space-between; }
+.chart-wrap:focus-visible { outline: 2px solid var(--accent-ink); outline-offset: 2px; border-radius: 4px; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+details.dtab { margin-top: 8px; font-size: 12.5px; }
+details.dtab summary { cursor: pointer; color: var(--accent-ink); font-weight: 600; }
+details.dtab .scroll { max-height: 320px; overflow-y: auto; margin-top: 6px; }
+details.dtab thead th { position: sticky; top: 0; background: var(--panel); }
+.mixgrid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; padding: 4px 0 2px; }
+.mixgrid label { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--muted); }
+.mixgrid input { width: 100%; min-width: 0; box-sizing: border-box; font: 600 13px var(--f-body); font-variant-numeric: tabular-nums; text-align: right; padding: 5px 6px; border: 1px solid var(--line); border-radius: 5px; background: var(--panel-2); color: var(--fg); }
+.mixgrid input:disabled { opacity: .5; }
+.mixnote { font-size: 11.5px; color: var(--muted); margin: 4px 0 0; }
 .cardhead { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 6px 12px; }
 .tornado { display: grid; grid-template-columns: minmax(120px, 210px) 1fr; gap: 6px 10px; align-items: center; font-size: 12.5px; font-variant-numeric: tabular-nums; }
 .tornado .tl { text-align: right; color: var(--fg); min-width: 0; }
@@ -228,9 +239,14 @@ details.how code { font-size: 12.5px; background: var(--panel-2); padding: 1px 5
 
       <div class="card">
         <h3>MOD acumulado por tarjeta, en valor presente</h3>
-        <p class="note">Por cada tarjeta originada, ponderado por supervivencia y descontado. Pasa el cursor para ver cada mes. Con el CAC activado, la línea punteada marca el CAC y el punto indica el mes de payback.</p>
+        <p class="note">Por cada tarjeta originada, ponderado por supervivencia y descontado. Pasa el cursor para ver cada mes, o selecciona el gráfico y usa las flechas del teclado. Con el CAC activado, la línea punteada marca el CAC y el punto indica el mes de payback.</p>
         <div class="legend"><span><i style="background:var(--base)"></i>Base</span><span><i style="background:var(--prop)"></i>Propuesta</span></div>
-        <div class="chart-wrap" id="chart"></div>
+        <div class="chart-wrap" id="chart" tabindex="0" role="group" aria-roledescription="gráfico" aria-describedby="chart-help"></div>
+        <p class="sr-only" id="chart-help">Flechas izquierda y derecha: mes anterior o siguiente. Re Pág y Av Pág: salta 12 meses. Inicio y Fin: primer y último mes. Los datos completos están en la tabla que sigue.</p>
+        <p class="sr-only" id="chart-live" aria-live="polite"></p>
+        <details class="dtab"><summary>Ver datos como tabla</summary>
+          <div class="scroll"><table class="wf" id="chart-data"></table></div>
+        </details>
       </div>
 
       <div class="card">
@@ -269,7 +285,10 @@ details.how code { font-size: 12.5px; background: var(--panel-2); padding: 1px 5
           <li><b>Pérdida esperada</b> = EAD × PD × LGD, con EAD = saldo del mes × deuda al default. Dos supuestos: <b>Riesgo</b> (LGD 58%, EAD 1,35×, los del PLV de Credicorp, entregados por Riesgo) y <b>Contable</b> (1 − recuperos / castigos y castigo medio / saldo medio, por segmento). El contable tiende a sobrestimar la pérdida porque no cuenta lo que el cliente paga entre el default y el castigo, y el castigo puede incluir intereses devengados.</li>
           <li><b>INOF neto</b> = ingresos por servicios (merchant fee, seguros, markup y comisiones, como % del GPV) + membresía − costo de loyalty.</li>
           <li><b>Costos lifetime</b> = costo de marca + costo de procesadora, como % del GPV (estructura y tasas del PLV de Credicorp).</li>
-          <li><b>Supervivencia</b>: cada mes sobrevive (1 − PD mensual) × (1 − fuga mensual). Todo se pondera por ella.</li>
+          <li><b>Supervivencia</b>: cada mes sobrevive (1 − PD mensual) × (1 − fuga del mes). Todo se pondera por ella. La fuga puede partir más alta (fuga temprana) y bajar en línea recta hasta la fuga estable; por defecto es plana.</li>
+          <li><b>Escenario macro</b>: el shock de fondeo suma puntos al costo de fondeo desde el mes indicado y traspasa una parte a la tasa de cuotas y avances. La inflación reajusta el GPV, la membresía y los seguros; el cupo queda fijo en pesos. Con todo en 0 el cálculo es el del PLV de Credicorp.</li>
+          <li><b>ITE</b> = GPV × % en cuotas con ITE a cargo de Tenpo × mín(0,066% × plazo, 0,8%). Por defecto 0: solo es costo de Tenpo cuando Tenpo lo asume.</li>
+          <li><b>Mezcla de la cosecha</b>: cada segmento (XS, Small, Medium, Large) corre con su perfil calibrado y los resultados se ponderan por su % de las tarjetas nuevas. No es lo mismo que promediar los supuestos: XS cancela mucho y pesa menos con los años. Lo que cambies respecto del perfil cargado (p. ej. +$3.000 de membresía o +0,5 pp de fuga) se aplica a cada segmento. La mezcla por defecto es la de las tarjetas vivas, no la de las altas.</li>
           <li><b>Saldo hábil</b> = cupo × utilización, que se construye en los primeros meses (rampa). Incluye cuotas con y sin interés y avances.</li>
           <li><b>MOD / saldo hábil</b> = MOD total ÷ saldo hábil total × 12, sin descontar, a 60 meses: el mismo cálculo del PLV de Credicorp.</li>
           <li><b>Calibración Tenpo</b> (oct-25 a sep-26): MAE.Cuentas (cupo, estados, mora), colocación oficial, revenue app TC, economics (GPV TC), misiones de loyalty y costo de riesgo. Perfiles por segmento de <code>fct_tipo_users_tc</code>. XS casi no tiene pérdidas y cancela mucho: probablemente es la tarjeta con garantía (no verificado) y no está en el PLV de Credicorp, que cubre BLACK y STANDARD.</li>
@@ -295,6 +314,10 @@ details.how code { font-size: 12.5px; background: var(--panel-2); padding: 1px 5
     { g: "Tasas", k: "rav", l: "Tasa avances, mensual", u: "%", min: 0, max: 5, step: 0.01, v: 3.43, src: "tp", why: "Solo aplica si se separan avances." },
     { g: "Tasas", k: "fondeo", l: "Costo de fondeo, anual", u: "%", min: 0, max: 20, step: 0.01, v: 8.28, src: "cc", why: "Tasa de transferencia del PLV de Credicorp: 0,69% mensual." },
     { g: "Tasas", k: "desc", l: "Tasa de descuento, anual", u: "%", min: 0, max: 30, step: 0.1, v: 10.4, src: "tp", why: "La de nuestro CLTV. Solo afecta el valor presente; el ratio MOD / saldo no se descuenta, igual que en Credicorp." },
+    { g: "Escenario macro", k: "dfon", l: "Shock al costo de fondeo, anual", u: "pb", min: -400, max: 600, step: 25, v: 0, src: "il", why: "Sube (o baja) el fondeo desde el mes indicado abajo, p. ej. si la TPM sube en el año 2. 100 pb = 1 punto porcentual." },
+    { g: "Escenario macro", k: "dfonMes", l: "Shock desde el mes", u: "m", min: 1, max: 120, step: 1, v: 13, src: "il", why: "Mes en que empieza el shock de fondeo. 13 = inicio del año 2." },
+    { g: "Escenario macro", k: "pass", l: "Traspaso del shock a la tasa de cuotas", u: "%", min: 0, max: 100, step: 5, v: 0, src: "il", why: "Parte del shock que se traslada a la tasa de cuotas con interés y avances. La tasa máxima convencional también se mueve con el mercado, pero el traspaso real depende de la competencia y la política comercial." },
+    { g: "Escenario macro", k: "ipc", l: "Inflación anual", u: "%", min: 0, max: 15, step: 0.1, v: 0, src: "il", why: "Reajusta mes a mes el GPV, la membresía y los seguros (el cupo no se reajusta solo). Con 0 los flujos quedan planos en pesos, aunque la tasa de descuento es nominal. Meta del Banco Central: 3%. Marca, procesadora, loyalty e ITE son % del GPV, así que suben con él." },
     { g: "Riesgo", k: "pd", l: "PD del primer año", u: "%", min: 0, max: 40, step: 0.1, v: 10.8, src: "tp", why: "Cuentas sanas a sep-25 que llegan a 90+ días o castigo en 12 meses (9 meses observables), anualizado." },
     { g: "Riesgo", k: "pdtail", l: "PD después del año 1 (× año 1)", u: "×", min: 0, max: 2, step: 0.05, v: 1, src: "il", why: "La PD medida es de la cartera completa, por eso se deja plana. La curva de Credicorp crece con la antigüedad." },
     { g: "Riesgo", k: "lgd", l: "LGD", u: "%", min: 0, max: 100, step: 1, v: 58, src: "cc", why: "Depende del supuesto de pérdida elegido arriba: Riesgo (58%, PLV de Credicorp) o Contable (1 − recuperos / castigos)." },
@@ -307,12 +330,19 @@ details.how code { font-size: 12.5px; background: var(--panel-2); padding: 1px 5
     { g: "Costos", k: "loy", l: "Costo de loyalty (% GPV)", u: "%", min: 0, max: 3, step: 0.01, v: 0.62, src: "tp", why: "Tenpesos de misiones CREDIT_CARD / GPV TC. Credicorp usa 0,35% del GPV." },
     { g: "Costos", k: "marca", l: "Costo de marca (% GPV)", u: "%", min: 0, max: 2, step: 0.01, v: 0.47, src: "cc", why: "PLV de Credicorp: 0,47% de las compras." },
     { g: "Costos", k: "proc", l: "Costo de procesadora (% GPV)", u: "%", min: 0, max: 2, step: 0.01, v: 0.19, src: "cc", why: "PLV de Credicorp: 0,19% de las compras." },
+    { g: "Costos", k: "iteSh", l: "Compras en cuotas con ITE a cargo de Tenpo (% GPV)", u: "%", min: 0, max: 100, step: 1, v: 0, src: "il", why: "Impuesto de timbres y estampillas: 0,066% por mes de plazo, con tope de 0,8%. Cuenta solo si Tenpo lo asume (p. ej. en campañas de cuotas sin interés); si lo paga el cliente no es costo de Tenpo. Validar con Tributario y revisar si ya está dentro de algún revenue neto." },
+    { g: "Costos", k: "itePl", l: "Plazo medio de esas cuotas", u: "m", min: 1, max: 36, step: 1, v: 6, src: "il", why: "Define la tasa del ITE: 0,066% × meses, tope 0,8% (12 meses o más)." },
     { g: "Costos", k: "cac", l: "CAC por tarjeta", u: "$", min: 0, max: 150000, step: 1000, v: 25000, src: "il", why: "Sin dato específico de TC. El PLV de Credicorp no incluye CAC." },
     { g: "Fuga y horizonte", k: "fuga", l: "Fuga mensual (cancelación)", u: "%", min: 0, max: 10, step: 0.05, v: 1.6, src: "tp", why: "Cuentas Normal que pasan a canceladas por el cliente al mes siguiente (mediana de 12 meses). XS concentra casi toda la cancelación. Credicorp usa 0,3%." },
+    { g: "Fuga y horizonte", k: "fugaIni", l: "Fuga de los primeros meses (× fuga estable)", u: "×", min: 1, max: 6, step: 0.1, v: 1, src: "il", why: "Las tarjetas nuevas suelen cancelar más los primeros meses. En el mes 1 la fuga es este múltiplo de la de arriba y baja en línea recta hasta igualarla. 1 = fuga plana. Ojo: la fuga medida es de la cartera completa; calibrar con cancelación por antigüedad (MAE) antes de usarlo como base." },
+    { g: "Fuga y horizonte", k: "fugaMeses", l: "Meses de fuga temprana", u: "m", min: 1, max: 24, step: 1, v: 6, src: "il", why: "Meses que tarda la fuga temprana en llegar a la fuga estable." },
     { g: "Fuga y horizonte", k: "h", l: "Horizonte", u: "m", min: 12, max: 120, step: 6, v: 60, src: "cc", why: "El PLV de Credicorp reporta 12 y 60 meses." },
   ];
   const SRC = { cc: ["Credicorp", "cc"], tp: ["Tenpo", "tp"], il: ["Ilustrativo", ""] };
-  const DEF = Object.fromEntries(P.map(p => [p.k, p.v]));
+  // mezcla de la cosecha: por defecto, la de las tarjetas vivas (SEGS.n)
+  const MIXK = ["XS", "Small", "Medium", "Large"];
+  const MIXDEF = { mixOn: false, mxXS: 22, mxSmall: 26, mxMedium: 41, mxLarge: 11 };
+  const DEF = { ...Object.fromEntries(P.map(p => [p.k, p.v])), ...MIXDEF };
   // perfiles calibrados (lgd/ead contables por segmento)
   const SEGS = {"Cartera": {"cupo": 1135000, "util": 43, "gi": 49, "av": 0, "gpv": 159000, "rrev": 3.43, "rav": 3.43, "pd": 10.8, "lgdC": 91, "eadC": 1.72, "mf": 1.51, "loy": 0.62, "fuga": 1.6, "n": 283000}, "XS": {"cupo": 166000, "util": 78.0, "gi": 49, "av": 0, "gpv": 79000, "rrev": 2.72, "rav": 2.72, "pd": 0.0, "lgdC": 61.0, "eadC": 1.0, "mf": 3.23, "loy": 0.27, "fuga": 6.5, "n": 62286}, "Small": {"cupo": 468000, "util": 57.0, "gi": 49, "av": 0, "gpv": 101000, "rrev": 3.3, "rav": 3.3, "pd": 14.6, "lgdC": 90.0, "eadC": 1.16, "mf": 1.27, "loy": 0.76, "fuga": 0.16, "n": 75127}, "Medium": {"cupo": 1224000, "util": 47.0, "gi": 49, "av": 0, "gpv": 176000, "rrev": 3.57, "rav": 3.57, "pd": 14.8, "lgdC": 92.0, "eadC": 1.33, "mf": 1.31, "loy": 0.68, "fuga": 0.17, "n": 116424}, "Large": {"cupo": 4562000, "util": 33.0, "gi": 49, "av": 0, "gpv": 405000, "rrev": 3.42, "rav": 3.42, "pd": 9.3, "lgdC": 92.0, "eadC": 2.55, "mf": 1.31, "loy": 0.59, "fuga": 0.22, "n": 30057}};
   const RIESGO = { lgd: 58, ead: 1.35 };
@@ -322,35 +352,46 @@ details.how code { font-size: 12.5px; background: var(--panel-2); padding: 1px 5
 
   const perfil = (k, modo) => { const { n, lgdC, eadC, ...v } = SEGS[k]; return { ...v, ...(modo === "contable" ? { lgd: lgdC, ead: eadC } : RIESGO), perfil: k }; };
   let state = { base: { ...DEF, ...perfil("Cartera", "riesgo"), cacOn: false }, prop: null, edit: "base", modo: "riesgo", tor: "prop" }, fresh = true;
-  try { const s = JSON.parse(localStorage.getItem(KEY) || "null"); if (s && s.base && s.prop) { state = { ...state, ...s }; fresh = false; } } catch (e) {}
+  try { const s = JSON.parse(localStorage.getItem(KEY) || "null"); if (s && s.base && s.prop) { state = { ...state, ...s, base: { ...DEF, ...s.base }, prop: { ...DEF, ...s.prop } }; fresh = false; } } catch (e) {}
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} };
 
   // ---------------- motor PLV ----------------
-  function plv(x) {
+  // flujos mes a mes de una tarjeta (sumas sin derivar, para poder mezclar cosechas)
+  function flujos(x) {
     const H = Math.round(x.h), util = x.util / 100, gi = x.gi / 100, av = Math.min(x.av / 100, 1 - gi);
     const h1 = 1 - Math.pow(1 - x.pd / 100, 1 / 12), h2 = Math.min(h1 * x.pdtail, 0.99);
-    const fm = x.fondeo / 100 / 12, dm = Math.pow(1 + x.desc / 100, 1 / 12) - 1, fuga = x.fuga / 100;
+    const dm = Math.pow(1 + x.desc / 100, 1 / 12) - 1, fuga = x.fuga / 100;
+    const ite = Math.min(0.00066 * x.itePl, 0.008) * x.iteSh / 100, ipcM = Math.pow(1 + x.ipc / 100, 1 / 12);
     let A = 1, acc = 0;
-    const c = { ing: 0, fon: 0, pe: 0, inof: 0, loy: 0, cost: 0 };   // valor presente
-    const s = { ing: 0, fon: 0, pe: 0, inof: 0, loy: 0, cost: 0 };   // nominal, para ratios
+    const c = { ing: 0, fon: 0, pe: 0, inof: 0, loy: 0, cost: 0, ite: 0 };   // valor presente
+    const s = { ing: 0, fon: 0, pe: 0, inof: 0, loy: 0, cost: 0, ite: 0 };   // nominal, para ratios
     let modSum = 0, saldoSum = 0; const curve = [];
     for (let t = 1; t <= H; t++) {
       const saldo = x.cupo * util * (1 - Math.exp(-3 * t / Math.max(x.ramp, 0.5)));
       const hz = t <= 12 ? h1 : h2, d = Math.pow(1 + dm, -t);
+      const shock = t >= x.dfonMes ? x.dfon / 100 : 0;                  // puntos porcentuales anuales
+      const fm = (x.fondeo + shock) / 100 / 12, dr = x.pass / 100 * shock / 12;   // dr: % mensual traspasado a la tasa
+      const ix = Math.pow(ipcM, t - 1), gpv = x.gpv * ix;
+      const ft = Math.min(0.99, fuga * (1 + (x.fugaIni - 1) * Math.max(0, 1 - (t - 1) / Math.max(x.fugaMeses, 1))));
       const f = {
-        ing: A * saldo * (gi * x.rrev / 100 + av * x.rav / 100),
+        ing: A * saldo * (gi * (x.rrev + dr) / 100 + av * (x.rav + dr) / 100),
         fon: A * saldo * fm,
         pe: A * hz * saldo * x.ead * (x.lgd / 100),
-        inof: A * (x.gpv * (x.mf / 100 + (x.intl / 100) * (x.markup / 100)) + x.seg + x.memb),
-        loy: A * x.gpv * x.loy / 100,
-        cost: A * x.gpv * (x.marca + x.proc) / 100,
+        inof: A * (gpv * (x.mf / 100 + (x.intl / 100) * (x.markup / 100)) + (x.seg + x.memb) * ix),
+        loy: A * gpv * x.loy / 100,
+        cost: A * gpv * (x.marca + x.proc) / 100,
+        ite: A * gpv * ite,
       };
-      const mod = f.ing - f.fon - f.pe + f.inof - f.loy - f.cost;
+      const mod = f.ing - f.fon - f.pe + f.inof - f.loy - f.cost - f.ite;
       for (const k in f) { c[k] += f[k] * d; s[k] += f[k]; }
       modSum += mod; saldoSum += A * saldo; acc += mod * d; curve.push(acc);
-      A *= (1 - hz) * (1 - fuga);
+      A *= (1 - hz) * (1 - ft);
     }
-    const vp = c.ing - c.fon - c.pe + c.inof - c.loy - c.cost;
+    return { H, c, s, curve, modSum, saldoSum, A };
+  }
+  function resultado(F, x) {
+    const { H, c, s, curve, modSum, saldoSum, A } = F;
+    const vp = c.ing - c.fon - c.pe + c.inof - c.loy - c.cost - c.ite;
     const ratio = saldoSum > 0 ? modSum / saldoSum * 12 : 0;
     const rs = k => saldoSum > 0 ? s[k] / saldoSum * 12 : 0;
     let payback = null;
@@ -358,6 +399,32 @@ details.how code { font-size: 12.5px; background: var(--panel-2); padding: 1px 5
     return { vp, ratio, c, curve, neto: vp - (x.cacOn ? x.cac : 0), saldoProm: saldoSum / H, sobrev: A, payback,
       r: { tif: rs("ing"), ef: -rs("fon"), pe: -rs("pe"), inof: rs("inof") - rs("loy"), cost: -rs("cost"), mod: ratio } };
   }
+
+  // Mezcla de la cosecha: cada segmento corre con su perfil calibrado y los resultados se ponderan
+  // (no se promedian los supuestos: una cartera XS de alta fuga no equivale a un "cliente promedio").
+  // Lo que el escenario cambió respecto de su perfil cargado se aplica a cada segmento como diferencia:
+  // proporcional en cupo y GPV, en puntos en el resto.
+  const SEGK = ["cupo", "util", "gi", "av", "gpv", "rrev", "rav", "pd", "lgd", "ead", "mf", "loy", "fuga"], PROP = ["cupo", "gpv"];
+  const pesos = x => { const w = MIXK.map(k => Math.max(0, +x["mx" + k] || 0)), t = w.reduce((a, b) => a + b, 0); return t > 0 ? w.map(v => v / t) : null; };
+  function segDe(x, k) {
+    const ref = { ...DEF, ...perfil(SEGS[x.perfil] ? x.perfil : "Cartera", state.modo) }, sg = perfil(k, state.modo), y = { ...x, ...sg };
+    SEGK.forEach(q => {
+      const p = P.find(o => o.k === q);
+      const v = PROP.includes(q) ? sg[q] * (ref[q] ? x[q] / ref[q] : 1) : sg[q] + (x[q] - ref[q]);
+      y[q] = Math.min(p.max, Math.max(p.min, v));
+    });
+    return y;
+  }
+  function plv(x) {
+    const w = x.mixOn && pesos(x);
+    if (!w) return resultado(flujos(x), x);
+    const Fs = MIXK.map(k => flujos(segDe(x, k)));
+    const sum = g => Fs.reduce((a, F, i) => a + w[i] * g(F), 0);
+    const comp = key => Object.fromEntries(Object.keys(Fs[0][key]).map(q => [q, sum(F => F[key][q])]));
+    return resultado({ H: Fs[0].H, c: comp("c"), s: comp("s"), curve: Fs[0].curve.map((_, t) => sum(F => F.curve[t])),
+      modSum: sum(F => F.modSum), saldoSum: sum(F => F.saldoSum), A: sum(F => F.A) }, x);
+  }
+  const mixTxt = x => { const w = x.mixOn && pesos(x); return w ? MIXK.map((k, i) => `${k} ${nf0.format(w[i] * 100)}%`).join(" · ") : ""; };
   const tramo = r => r > 0.10 ? ["Buen potencial", "var(--tramo-buen)"] : r >= 0.05 ? ["Potencial medio", "var(--tramo-medio)"]
     : r >= 0 ? ["Bajo o sin potencial", "var(--tramo-bajo)"] : ["Destructivo", "var(--tramo-destr)"];
 
@@ -384,9 +451,14 @@ details.how code { font-size: 12.5px; background: var(--panel-2); padding: 1px 5
   // supuestos, sube CODE_VER y agrega en MIGRA[N] la función que lleva un código vN a vN+1
   // (p. ej. inyectando el default de un costo nuevo). unpack aplica las migraciones en cadena,
   // así un link antiguo sigue abriendo la misma simulación.
-  const CODE_VER = 1;
+  const CODE_VER = 2;
   const MIGRA = {
-    // 1: o => ({ ...o, b: { ...o.b, nuevoCosto: 0 }, p: { ...o.p, nuevoCosto: 0 } }),
+    // v1 → v2: llegan fuga temprana, shock de fondeo, inflación, ITE y mezcla de la cosecha.
+    // Un código v1 se lee con fuga plana, sin shock, sin inflación, sin ITE y sin mezcla (= lo que calculaba v1).
+    1: o => {
+      const v2 = { fugaIni: 1, fugaMeses: 6, dfon: 0, dfonMes: 13, pass: 0, ipc: 0, iteSh: 0, itePl: 6, ...MIXDEF };
+      return { ...o, b: { ...v2, ...o.b }, p: { ...v2, ...o.p } };
+    },
   };
   const pack = () => `plv${CODE_VER}.` + enc({ b: state.base, p: state.prop, m: state.modo });
   function unpack(code) {
@@ -401,7 +473,8 @@ details.how code { font-size: 12.5px; background: var(--panel-2); padding: 1px 5
       if (!MIGRA[v]) throw new Error(`falta la migración plv${v} → plv${v + 1}`);
       o = MIGRA[v](o);
     }
-    const clean = x => Object.fromEntries(Object.entries({ ...DEF, ...x }).filter(([k]) => k in DEF || ["cacOn", "perfil"].includes(k)));
+    const clean = x => Object.fromEntries(Object.entries({ ...DEF, ...x }).filter(([k]) => k in DEF || ["cacOn", "perfil"].includes(k))
+      .map(([k, v]) => [k, k === "mixOn" || k === "cacOn" ? !!v : k === "perfil" ? v : +v]));
     state.base = clean(o.b); state.prop = clean(o.p); state.modo = o.m === "contable" ? "contable" : "riesgo";
   }
   try { if (location.hash && location.hash.length > 8) { unpack(location.hash.slice(1)); fresh = false; } } catch (e) {}
@@ -411,7 +484,10 @@ details.how code { font-size: 12.5px; background: var(--panel-2); padding: 1px 5
   const box = document.getElementById("params");
   function renderParams() {
     const x = state[state.edit];
-    let html = "", g = "";
+    let html = `<fieldset><legend>Mezcla de la cosecha</legend>
+      <label class="toggle" for="mixOn"><input type="checkbox" id="mixOn" ${x.mixOn ? "checked" : ""}> Simular como mezcla de segmentos (% de las tarjetas nuevas)</label>
+      <div class="mixgrid">${MIXK.map(k => `<label>${k}<input type="number" min="0" max="100" step="1" data-mx="${k}" value="${x["mx" + k]}" ${x.mixOn ? "" : "disabled"} aria-label="${k} (% de la cosecha)"></label>`).join("")}</div>
+      <p class="mixnote" id="mix-note"></p></fieldset>`, g = "";
     P.forEach(p => {
       if (p.g !== g) { if (g) html += "</fieldset>"; html += `<fieldset><legend>${p.g}</legend>`; g = p.g; }
       const [sl, sc] = SRC[p.src];
@@ -427,7 +503,16 @@ details.how code { font-size: 12.5px; background: var(--panel-2); padding: 1px 5
     });
     box.innerHTML = html + "</fieldset>";
     document.getElementById("perfil-actual").textContent = `Editando ${state.edit === "base" ? "Base" : "Propuesta"} · perfil ${x.perfil || "personalizado"}. Si cambias un supuesto, el perfil queda como punto de partida.`;
-    updateHint();
+    updateHint(); updateMixNote();
+  }
+  function updateMixNote() {
+    const x = state[state.edit], el = document.getElementById("mix-note"), w = pesos(x);
+    if (!el) return;
+    const ref = SEGS[x.perfil] ? x.perfil : "Cartera";
+    el.textContent = !x.mixOn
+      ? "Apagada: el escenario usa un solo perfil. Por defecto, la mezcla de las tarjetas vivas (las tarjetas nuevas suelen traer más XS, que cancela más)."
+      : !w ? "Ingresa al menos un porcentaje mayor que 0."
+      : `Se usa ${mixTxt(x)}${Math.round(MIXK.reduce((a, k) => a + (+x["mx" + k] || 0), 0)) !== 100 ? " (normalizado a 100%)" : ""}. Cada segmento corre con su perfil calibrado; lo que cambies abajo respecto del perfil ${ref} se aplica a todos como diferencia.`;
   }
   function updateHint() {
     const x = state[state.edit], el = document.getElementById("hint-ngi");
@@ -443,6 +528,12 @@ details.how code { font-size: 12.5px; background: var(--panel-2); padding: 1px 5
   box.addEventListener("input", e => {
     const k = e.target.dataset.k;
     if (e.target.id === "cacOn") { state[state.edit].cacOn = e.target.checked; save(); render(); return; }
+    if (e.target.id === "mixOn") return;   // se maneja en change
+    const mk = e.target.dataset.mx;
+    if (mk) {
+      const v = parseFloat(e.target.value); if (!isFinite(v)) return;
+      state[state.edit]["mx" + mk] = Math.min(100, Math.max(0, v)); updateMixNote(); save(); render(); return;
+    }
     if (!k) return;
     const p = P.find(q => q.k === k); let v = parseFloat(e.target.value);
     if (!isFinite(v)) return;
@@ -453,7 +544,14 @@ details.how code { font-size: 12.5px; background: var(--panel-2); padding: 1px 5
     if (row) row.classList.toggle("changed", state.edit === "prop" && v !== state.base[k]);
     updateHint(); save(); render();
   });
-  box.addEventListener("change", e => { if (e.target.id === "cacOn") { state[state.edit].cacOn = e.target.checked; save(); render(); } });
+  box.addEventListener("change", e => {
+    if (e.target.id === "cacOn") { state[state.edit].cacOn = e.target.checked; save(); render(); }
+    if (e.target.id === "mixOn") {
+      state[state.edit].mixOn = e.target.checked;
+      box.querySelectorAll("[data-mx]").forEach(i => { i.disabled = !e.target.checked; });
+      updateMixNote(); save(); render();
+    }
+  });
 
   const setTabs = () => document.querySelectorAll(".tabs button").forEach(x => x.setAttribute("aria-selected", x.dataset.s === state.edit ? "true" : "false"));
   document.querySelectorAll(".tabs button").forEach(b => b.addEventListener("click", () => { state.edit = b.dataset.s; save(); setTabs(); renderParams(); }));
@@ -508,11 +606,12 @@ details.how code { font-size: 12.5px; background: var(--panel-2); padding: 1px 5
     const rb = plv(state.base), rp = plv(state.prop), fmt = v => String(Math.round(v * 10000) / 10000).replace(".", ",");
     const L = [["Supuesto", "Base", "Propuesta"].join("\t")];
     P.forEach(p => L.push([`${p.l} (${p.u})`, fmt(state.base[p.k]), fmt(state.prop[p.k])].join("\t")));
-    L.push(["Supuesto de pérdida", state.modo, state.modo].join("\t"), "");
+    L.push(["Supuesto de pérdida", state.modo, state.modo].join("\t"));
+    L.push(["Mezcla de la cosecha", mixTxt(state.base) || "apagada", mixTxt(state.prop) || "apagada"].join("\t"), "");
     L.push(["Resultado", "Base", "Propuesta"].join("\t"));
     [["MOD / saldo hábil", rb.ratio, rp.ratio], ["MOD por tarjeta (VP)", rb.vp, rp.vp], ["Ingreso financiero (VP)", rb.c.ing, rp.c.ing], ["Costo de fondeo (VP)", -rb.c.fon, -rp.c.fon],
      ["Pérdida esperada (VP)", -rb.c.pe, -rp.c.pe], ["Ingresos no financieros (VP)", rb.c.inof, rp.c.inof], ["Costo de loyalty (VP)", -rb.c.loy, -rp.c.loy],
-     ["Marca + procesadora (VP)", -rb.c.cost, -rp.c.cost]].forEach(r => L.push([r[0], fmt(r[1]), fmt(r[2])].join("\t")));
+     ["Marca + procesadora (VP)", -rb.c.cost, -rp.c.cost], ["Impuesto de timbres, ITE (VP)", -rb.c.ite, -rp.c.ite]].forEach(r => L.push([r[0], fmt(r[1]), fmt(r[2])].join("\t")));
     copyText(L.join("\n"), "Resultados copiados. Pégalos en Excel o Google Sheets.");
   });
 
@@ -525,7 +624,8 @@ details.how code { font-size: 12.5px; background: var(--panel-2); padding: 1px 5
       delta = `<div class="delta ${dv >= 0 ? "up" : "down"}">${dv >= 0 ? "▲" : "▼"} ${money(dv)} por tarjeta · ${dr >= 0 ? "+" : "−"}${nf1.format(Math.abs(dr))} pp en MOD/saldo vs Base</div>`;
     }
     const pb = !x.cacOn ? "CAC apagado" : r.payback > 0 ? `mes ${r.payback}` : `no ocurre en ${Math.round(x.h)} meses`;
-    el.innerHTML = `<h2>${name}${x.perfil ? " · " + x.perfil : ""}</h2>
+    const mt = mixTxt(x);
+    el.innerHTML = `<h2>${name}${mt ? " · mezcla" : x.perfil ? " · " + x.perfil : ""}</h2>${mt ? `<div style="color:var(--muted);font-size:12px">${mt}</div>` : ""}
       <div class="ratio">${pct(r.ratio)}</div>
       <div style="color:var(--muted);font-size:12.5px">MOD anual / saldo hábil</div>
       <span class="pill" style="--c:${tc}">${tl}</span>
@@ -572,16 +672,32 @@ details.how code { font-size: 12.5px; background: var(--panel-2); padding: 1px 5
     g += `<line id="hv" x1="0" x2="0" y1="${m.t}" y2="${H - m.b}" stroke="var(--fg)" stroke-opacity=".35" visibility="hidden"/>`;
     g += `<rect id="hov" x="${m.l}" y="${m.t}" width="${W - m.l - m.r}" height="${H - m.t - m.b}" fill="transparent"/>`;
     const wrap = document.getElementById("chart");
-    wrap.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="MOD acumulado en valor presente, Base vs Propuesta">${g}</svg><div class="tip" id="tip" hidden></div>`;
+    const pbTxt = (r, cac) => cac ? (r.payback > 0 ? `, payback en el mes ${r.payback}` : ", sin payback en el horizonte") : "";
+    const resumen = `MOD acumulado en valor presente por tarjeta. Base termina en ${money(rb.curve[lb])}${pbTxt(rb, cacB)}; Propuesta termina en ${money(rp.curve[lp])}${pbTxt(rp, cacP)}.`;
+    wrap.setAttribute("aria-label", resumen);
+    wrap.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="100%" aria-hidden="true">${g}</svg><div class="tip" id="tip" hidden aria-hidden="true"></div>`;
+    let tb = `<caption class="sr-only">MOD acumulado en valor presente por tarjeta, mes a mes</caption><thead><tr><th scope="col">Mes</th><th scope="col">Base</th><th scope="col">Propuesta</th><th scope="col">Diferencia</th></tr></thead><tbody>`;
+    for (let i = 0; i < n; i++) {
+      const b = rb.curve[i], p = rp.curve[i], d = (p ?? NaN) - (b ?? NaN);
+      const cel = v => v == null || !isFinite(v) ? "<td>—</td>" : `<td class="${v < 0 ? "neg" : ""}">${money(v)}</td>`;
+      tb += `<tr><th scope="row" style="font-weight:400;text-align:left">${i + 1}</th>${cel(b)}${cel(p)}${cel(d)}</tr>`;
+    }
+    document.getElementById("chart-data").innerHTML = tb + "</tbody>";
     CH = { x, n, m, W, rb, rp };
+    if (kIdx != null) showAt(Math.min(kIdx, n - 1));
   }
   const chartEl = document.getElementById("chart");
+  let kIdx = null;   // mes elegido con el teclado (null = no hay)
+  const hideTip = () => { const t = document.getElementById("tip"), hv = document.getElementById("hv"); if (t) t.hidden = true; if (hv) hv.setAttribute("visibility", "hidden"); };
   function hover(ev) {
     if (!CH) return;
+    const rect = chartEl.querySelector("svg").getBoundingClientRect(), sx = (ev.clientX - rect.left) / rect.width * CH.W;
+    if (sx < CH.m.l || sx > CH.W - CH.m.r) { hideTip(); return; }
+    showAt(Math.max(0, Math.min(CH.n - 1, Math.round((sx - CH.m.l) / (CH.W - CH.m.l - CH.m.r) * (CH.n - 1)))));
+  }
+  function showAt(i) {
     const svg = chartEl.querySelector("svg"), tip = document.getElementById("tip"), hv = document.getElementById("hv");
-    const rect = svg.getBoundingClientRect(), sx = (ev.clientX - rect.left) / rect.width * CH.W;
-    if (sx < CH.m.l || sx > CH.W - CH.m.r) { tip.hidden = true; hv.setAttribute("visibility", "hidden"); return; }
-    const i = Math.max(0, Math.min(CH.n - 1, Math.round((sx - CH.m.l) / (CH.W - CH.m.l - CH.m.r) * (CH.n - 1))));
+    const rect = svg.getBoundingClientRect();
     hv.setAttribute("x1", CH.x(i)); hv.setAttribute("x2", CH.x(i)); hv.setAttribute("visibility", "visible");
     tip.innerHTML = `<b>Mes ${i + 1}</b><span>Base <strong>${money(CH.rb.curve[i] ?? NaN)}</strong></span><span>Propuesta <strong>${money(CH.rp.curve[i] ?? NaN)}</strong></span>`;
     tip.hidden = false;
@@ -597,7 +713,19 @@ details.how code { font-size: 12.5px; background: var(--panel-2); padding: 1px 5
     tip.style.left = left + "px"; tip.style.top = "18px";
   }
   chartEl.addEventListener("pointermove", hover);
-  chartEl.addEventListener("pointerleave", () => { const t = document.getElementById("tip"), hv = document.getElementById("hv"); if (t) t.hidden = true; if (hv) hv.setAttribute("visibility", "hidden"); });
+  chartEl.addEventListener("pointerleave", () => { if (kIdx == null) hideTip(); else showAt(kIdx); });
+  chartEl.addEventListener("keydown", e => {
+    if (!CH) return;
+    const last = CH.n - 1, cur = kIdx ?? -1;
+    const next = { ArrowRight: cur + 1, ArrowLeft: cur < 0 ? last : cur - 1, PageDown: cur + 12, PageUp: cur - 12, Home: 0, End: last }[e.key];
+    if (e.key === "Escape") { kIdx = null; hideTip(); return; }
+    if (next == null) return;
+    e.preventDefault();
+    kIdx = Math.max(0, Math.min(last, next)); showAt(kIdx);
+    const b = CH.rb.curve[kIdx], p = CH.rp.curve[kIdx];
+    document.getElementById("chart-live").textContent = `Mes ${kIdx + 1}: Base ${b == null ? "sin dato" : money(b)}, Propuesta ${p == null ? "sin dato" : money(p)}.`;
+  });
+  chartEl.addEventListener("blur", () => { kIdx = null; hideTip(); });
 
   function tornado() {
     const sc = state.tor, x0 = state[sc], base = plv(x0).ratio;
@@ -606,7 +734,7 @@ details.how code { font-size: 12.5px; background: var(--panel-2); padding: 1px 5
       const up = plv({ ...x0, [p.k]: Math.min(p.max, x0[p.k] * 1.1) }).ratio - base;
       const dn = plv({ ...x0, [p.k]: Math.max(p.min, x0[p.k] * 0.9) }).ratio - base;
       return { p, up, dn, mag: Math.max(Math.abs(up), Math.abs(dn)) };
-    }).sort((a, b) => b.mag - a.mag).slice(0, 10);
+    }).filter(r => r.mag > 1e-7).sort((a, b) => b.mag - a.mag).slice(0, 10);
     const mx = Math.max(...rows.map(r => r.mag), 1e-6);
     const seg = (v, cls) => { const w = Math.abs(v) / mx * 48; return `<span class="${cls}" style="width:${w}%;left:${v >= 0 ? 50 : 50 - w}%"></span>`; };
     document.getElementById("tornado").innerHTML = rows.map(r => `<div class="tl">${r.p.l}<small>${nf1.format(x0[r.p.k] * 0.9)} a ${nf1.format(x0[r.p.k] * 1.1)} ${r.p.u}</small></div>
@@ -621,7 +749,8 @@ details.how code { font-size: 12.5px; background: var(--panel-2); padding: 1px 5
   function waterfall(rb, rp) {
     const rows = [["Ingreso financiero", rb.c.ing, rp.c.ing], ["Costo de fondeo", -rb.c.fon, -rp.c.fon], ["Pérdida esperada", -rb.c.pe, -rp.c.pe],
       ["Ingresos no financieros", rb.c.inof, rp.c.inof], ["Costo de loyalty", -rb.c.loy, -rp.c.loy], ["Marca + procesadora", -rb.c.cost, -rp.c.cost]];
-    const mx = Math.max(...rows.flatMap(r => [Math.abs(r[1]), Math.abs(r[2])]), 1);
+    if (rb.c.ite || rp.c.ite) rows.push(["Impuesto de timbres (ITE)", -rb.c.ite, -rp.c.ite]);
+    const mx =Math.max(...rows.flatMap(r => [Math.abs(r[1]), Math.abs(r[2])]), 1);
     const bar = (v, cls) => { const w = Math.abs(v) / mx * 50; return `<span class="${cls}" style="width:${w}%;left:${v >= 0 ? 50 : 50 - w}%"></span>`; };
     const dif = d => Math.abs(d) < 0.5 ? "—" : (d > 0 ? "+" : "") + money(d);
     let h = `<thead><tr><th>Componente</th><th>Base</th><th>Propuesta</th><th>Diferencia</th><th class="barcell" aria-hidden="true"></th></tr></thead><tbody>`;
@@ -633,8 +762,9 @@ details.how code { font-size: 12.5px; background: var(--panel-2); padding: 1px 5
     document.getElementById("wf").innerHTML = h;
   }
 
-  const comunes = ["pdtail", "marca", "proc", "cac", "h", "fondeo", "desc", "ramp", "intl", "markup", "seg", "memb"];
-  const segX = k => ({ ...DEF, ...Object.fromEntries(comunes.map(c => [c, state.base[c]])), ...perfil(k, state.modo), cacOn: false });
+  const comunes = ["pdtail", "marca", "proc", "cac", "h", "fondeo", "desc", "ramp", "intl", "markup", "seg", "memb",
+    "fugaIni", "fugaMeses", "dfon", "dfonMes", "pass", "ipc", "iteSh", "itePl"];
+  const segX = k => ({ ...DEF, ...Object.fromEntries(comunes.map(c => [c, state.base[c]])), ...perfil(k, state.modo), cacOn: false, mixOn: false });
   function renderSegs() {
     let h = `<thead><tr><th>Perfil</th><th>Tarjetas vivas</th><th>Saldo por tarjeta</th><th>PD anual</th><th>Fuga mensual</th><th>MOD / saldo</th><th>Tramo</th><th>MOD por tarjeta (VP)</th></tr></thead><tbody>`;
     ["XS", "Small", "Medium", "Large", "Cartera"].forEach(k => {
