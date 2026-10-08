@@ -219,6 +219,7 @@ details.dtab thead th { position: sticky; top: 0; background: var(--panel); }
         <div class="tools">
           <button class="btn" id="share-copy">Copiar código</button>
           <button class="btn" id="export">Copiar resultados para Excel</button>
+          <button class="btn" id="export-csv">Descargar CSV</button>
         </div>
         <div class="share">
           <input id="share-in" type="text" placeholder="Pega aquí un código de escenario" aria-label="Código de escenario">
@@ -602,17 +603,38 @@ details.dtab thead th { position: sticky; top: 0; background: var(--panel); }
     try { unpack(document.getElementById("share-in").value); fresh = false; save(); renderModo(); renderParams(); render(); msg("Escenario cargado."); }
     catch (e) { msg(/versión más nueva/.test(e.message) ? "Este código viene de una versión más nueva del simulador; abre el link con esa versión." : `El código no se pudo leer. Revisa que esté completo, desde plv${CODE_VER}.`); }
   });
-  document.getElementById("export").addEventListener("click", () => {
+  // filas de la exportación; conMeses agrega la curva mes a mes (solo en el CSV, que no tiene límite práctico de largo)
+  function filasExport(conMeses) {
     const rb = plv(state.base), rp = plv(state.prop), fmt = v => String(Math.round(v * 10000) / 10000).replace(".", ",");
-    const L = [["Supuesto", "Base", "Propuesta"].join("\t")];
-    P.forEach(p => L.push([`${p.l} (${p.u})`, fmt(state.base[p.k]), fmt(state.prop[p.k])].join("\t")));
-    L.push(["Supuesto de pérdida", state.modo, state.modo].join("\t"));
-    L.push(["Mezcla de la cosecha", mixTxt(state.base) || "apagada", mixTxt(state.prop) || "apagada"].join("\t"), "");
-    L.push(["Resultado", "Base", "Propuesta"].join("\t"));
+    const F = [["Supuesto", "Base", "Propuesta"]];
+    P.forEach(p => F.push([`${p.l} (${p.u})`, fmt(state.base[p.k]), fmt(state.prop[p.k])]));
+    F.push(["Supuesto de pérdida", state.modo, state.modo]);
+    F.push(["Mezcla de la cosecha", mixTxt(state.base) || "apagada", mixTxt(state.prop) || "apagada"], []);
+    F.push(["Resultado", "Base", "Propuesta"]);
     [["MOD / saldo hábil", rb.ratio, rp.ratio], ["MOD por tarjeta (VP)", rb.vp, rp.vp], ["Ingreso financiero (VP)", rb.c.ing, rp.c.ing], ["Costo de fondeo (VP)", -rb.c.fon, -rp.c.fon],
      ["Pérdida esperada (VP)", -rb.c.pe, -rp.c.pe], ["Ingresos no financieros (VP)", rb.c.inof, rp.c.inof], ["Costo de loyalty (VP)", -rb.c.loy, -rp.c.loy],
-     ["Marca + procesadora (VP)", -rb.c.cost, -rp.c.cost], ["Impuesto de timbres, ITE (VP)", -rb.c.ite, -rp.c.ite]].forEach(r => L.push([r[0], fmt(r[1]), fmt(r[2])].join("\t")));
-    copyText(L.join("\n"), "Resultados copiados. Pégalos en Excel o Google Sheets.");
+     ["Marca + procesadora (VP)", -rb.c.cost, -rp.c.cost], ["Impuesto de timbres, ITE (VP)", -rb.c.ite, -rp.c.ite]].forEach(r => F.push([r[0], fmt(r[1]), fmt(r[2])]));
+    if (conMeses) {
+      F.push([], ["Mes", "MOD acumulado VP Base", "MOD acumulado VP Propuesta"]);
+      for (let i = 0; i < Math.max(rb.curve.length, rp.curve.length); i++) F.push([String(i + 1), rb.curve[i] == null ? "" : fmt(rb.curve[i]), rp.curve[i] == null ? "" : fmt(rp.curve[i])]);
+    }
+    F.push([], ["Código del escenario", pack()]);
+    return F;
+  }
+  document.getElementById("export").addEventListener("click", () => {
+    copyText(filasExport(false).map(r => r.join("\t")).join("\n"), "Resultados copiados. Pégalos en Excel o Google Sheets.");
+  });
+  // CSV con ";" y coma decimal (Excel en español). El BOM hace que Excel lea bien los acentos.
+  document.getElementById("export-csv").addEventListener("click", () => {
+    const q = v => /[;"\r\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
+    const csv = "﻿" + filasExport(true).map(r => r.map(q).join(";")).join("\r\n");
+    try {
+      const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+      const a = Object.assign(document.createElement("a"), { href: url, download: `Simulacion_PLV_${new Date().toISOString().slice(0, 10)}.csv` });
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      msg("Descargando el CSV. Si no aparece, tu navegador bloqueó la descarga: usa Copiar resultados para Excel.");
+    } catch (e) { msg("No se pudo descargar el archivo: usa Copiar resultados para Excel."); }
   });
 
   // ---------------- resultados ----------------
